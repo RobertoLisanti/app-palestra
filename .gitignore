@@ -1,0 +1,7 @@
+# build artifacts strumenti dev (C#)
+**/bin/
+**/obj/
+
+# os
+Thumbs.db
+.DS_Store

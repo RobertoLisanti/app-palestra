@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "palestra",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "devserver", "5500"],
+      "port": 5500
+    }
+  ]
+}
