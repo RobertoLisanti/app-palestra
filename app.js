@@ -294,7 +294,6 @@ function onUser(user) {
         <div class="account-name">${esc(user.nome || ('@' + (user.username || 'account')))}</div>
         <div class="account-email muted">${esc(user.username ? '@' + user.username : '')}${user.email ? ' · ' + esc(user.email) : ''}</div>
       </div>
-      <div id="bioRow"></div>
       <button id="logoutBtn" class="account-logout">Esci</button>
     </div>`;
   const btn = host.querySelector('#accountBtn');
@@ -305,28 +304,6 @@ function onUser(user) {
   host.querySelector('#logoutBtn').addEventListener('click', () => {
     if (window.palestraLogout) window.palestraLogout();
   });
-
-  // riga sblocco biometrico — solo su telefono/tablet
-  const bio = window.palestraBio;
-  const bioRow = host.querySelector('#bioRow');
-  if (bio && bio.supported()) {
-    const render = () => {
-      const on = bio.isEnabled();
-      bioRow.innerHTML = `<button class="account-action">${on ? 'Disattiva' : 'Attiva'} sblocco impronta</button>`;
-      bioRow.querySelector('button').addEventListener('click', async (e) => {
-        e.stopPropagation();
-        try {
-          if (on) { bio.disable(); toast('Sblocco impronta disattivato'); }
-          else { await bio.enable(); toast('Sblocco impronta attivato ✓'); }
-        } catch (err) {
-          const m = String(err && err.message || err).toLowerCase();
-          toast(m.includes('not allowed') || m.includes('abort') ? 'Operazione annullata' : 'Impronta non disponibile su questo browser');
-        }
-        render();
-      });
-    };
-    render();
-  }
 }
 
 /* ---------------- boot ---------------- */
