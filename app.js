@@ -215,9 +215,9 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
         <div class="sheet-sub muted">${esc(wk.label || ('W' + (wkIdx + 1)))}${wk.obiettivo ? ' · obiettivo: ' + esc(wk.obiettivo) : ''}</div>
       </div>
       <div class="sheet-body">
-        <div class="log-grid">
+        <div class="log-grid" id="logGrid">
           <label class="field-sm"><span>Serie</span><input id="logSerie" inputmode="numeric" value="${esc(log.serie || '')}" placeholder="4" /></label>
-          <label class="field-sm"><span>Reps</span><input id="logReps" inputmode="text" value="${esc(log.reps || '')}" placeholder="8" /></label>
+          <label class="field-sm"><span>Reps</span><input id="logReps" inputmode="numeric" value="${esc(log.reps || '')}" placeholder="8" /></label>
           <label class="field-sm"><span>Kg</span><input id="logKg" inputmode="text" value="${esc(log.kg || '')}" placeholder="50" /></label>
         </div>
         <div class="field-sm"><span>Com'è andata</span>
@@ -239,9 +239,27 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
   document.body.appendChild(m);
   document.body.classList.add('sheet-open');
 
+  const logGrid = m.querySelector('#logGrid');
+  const logSerie = m.querySelector('#logSerie');
+  const logReps = m.querySelector('#logReps');
+  const logKg = m.querySelector('#logKg');
+
+  // solo numeri per serie e reps
+  [logSerie, logReps].forEach((inp) => {
+    inp.addEventListener('input', () => { inp.value = inp.value.replace(/[^0-9]/g, ''); });
+  });
+
+  function syncGridVisibility() {
+    const isRosso = colore === 'rosso';
+    logGrid.hidden = isRosso;
+    if (isRosso) { logSerie.value = ''; logReps.value = ''; logKg.value = ''; }
+  }
+  syncGridVisibility(); // init: se si riapre un log già rosso
+
   m.querySelectorAll('#logColore button').forEach((b) => b.addEventListener('click', () => {
     colore = colore === b.dataset.c ? '' : b.dataset.c;
     m.querySelectorAll('#logColore button').forEach((x) => x.classList.toggle('on', x.dataset.c === colore));
+    syncGridVisibility();
   }));
 
   const close = () => { m.remove(); document.body.classList.remove('sheet-open'); };
@@ -250,15 +268,15 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
   const clearBtn = m.querySelector('#logClear');
   if (clearBtn) clearBtn.addEventListener('click', () => doSave(null));
   m.querySelector('#logSave').addEventListener('click', () => {
-    const newLog = {
-      serie: m.querySelector('#logSerie').value.trim(),
-      reps: m.querySelector('#logReps').value.trim(),
-      kg: m.querySelector('#logKg').value.trim(),
-      colore,
-      note: m.querySelector('#logNote').value.trim(),
-    };
-    const empty = !newLog.serie && !newLog.reps && !newLog.kg && !newLog.colore && !newLog.note;
-    doSave(empty ? null : newLog);
+    if (!colore) { toast("Seleziona com'è andata"); return; }
+    const serie = logSerie.value.trim();
+    const reps = logReps.value.trim();
+    const kg = logKg.value.trim();
+    if (colore !== 'rosso' && (!serie || !reps || !kg)) {
+      toast('Inserisci serie, reps e kg'); return;
+    }
+    const note = m.querySelector('#logNote').value.trim();
+    doSave({ serie, reps, kg, colore, note });
   });
 
   async function doSave(newLog) {
