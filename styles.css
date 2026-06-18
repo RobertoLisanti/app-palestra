@@ -26,6 +26,8 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* l'attributo [hidden] deve sempre vincere su display: block dei componenti */
+[hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {
   background: var(--bg);
