@@ -23,6 +23,12 @@ const toastEl = document.getElementById('toast');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+function fmtTs(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 function fmtDate(iso) {
   if (!iso) return '';
   const d = new Date(iso + 'T00:00:00');
@@ -145,33 +151,33 @@ function exerciseCard(e, index, curWeek, ctx) {
     ? `<div class="notes">${notes.map((n) => `<div class="note"><span class="dot">›</span><span>${esc(n)}</span></div>`).join('')}</div>`
     : '';
 
-  const progHtml = weeks.length ? `<div class="prog">${weeks.map((w, wi) => {
-    const isCur = wi === curWeek;
+  const progHtml = weeks.length ? `<div class=”prog”>${weeks.map((w, wi) => {
     const hasTarget = !!(w.obiettivo && w.obiettivo.trim());
     const log = w.log || null;
     const colore = (log && log.colore) || '';
     // risultato segnato (data entry)
     let logHtml = '';
-    if (log && (log.serie || log.reps || log.kg || log.note)) {
+    if (log && (log.serie || log.reps || log.kg || log.note || log.colore)) {
       const parts = [];
       if (log.serie || log.reps) parts.push(`${esc(log.serie || '–')}×${esc(log.reps || '–')}`);
       if (log.kg) parts.push(`${esc(log.kg)} kg`);
       const summary = parts.join(' · ');
-      logHtml = `<div class="logline">${summary ? `<span class="logval">${summary}</span>` : '<span class="logval muted">segnato</span>'}${log.note ? `<span class="lognote">${esc(log.note)}</span>` : ''}</div>`;
+      const tsHtml = log.ts ? `<span class=”logts”>${fmtTs(log.ts)}</span>` : '';
+      logHtml = `<div class=”logline”>${summary ? `<span class=”logval”>${summary}</span>` : '<span class=”logval muted”>segnato</span>'}${tsHtml}${log.note ? `<span class=”lognote”>${esc(log.note)}</span>` : ''}</div>`;
     }
     // feedback storico (solo se non c'è un log)
     const fb = (!log && w.feedback && w.feedback.trim() && w.feedback.trim() !== (w.obiettivo || '').trim())
-      ? `<div class="feedback"><span class="q">”</span><span>${esc(w.feedback)}</span></div>` : '';
-    const attrs = editable ? `data-sch="${esc(ctx.schedId)}" data-day="${ctx.dayIndex}" data-ex="${index}" data-wk="${wi}"` : '';
+      ? `<div class=”feedback”><span class=”q”>”</span><span>${esc(w.feedback)}</span></div>` : '';
+    const attrs = editable ? `data-sch=”${esc(ctx.schedId)}” data-day=”${ctx.dayIndex}” data-ex=”${index}” data-wk=”${wi}”` : '';
     const action = editable
       ? (log
-        ? `<span class="logedit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>`
-        : `<span class="addlog">+ segna</span>`)
+        ? `<span class=”logedit”><svg viewBox=”0 0 24 24” width=”16” height=”16” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><path d=”M12 20h9”/><path d=”M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z”/></svg></span>`
+        : `<span class=”addlog”>+ segna</span>`)
       : '';
-    return `<div class="prog-row ${isCur ? 'is-current' : ''} ${editable ? 'editable' : ''} ${colore ? 'sem-' + colore : ''}" ${attrs}>
-      <div class="wbadge">${esc(w.label || ('W' + (wi + 1)))}</div>
-      <div class="prog-body">
-        <div class="target ${hasTarget ? '' : 'empty'}">${hasTarget ? esc(w.obiettivo) : '—'}${isCur ? '<span class="cur-tag">ora</span>' : ''}</div>
+    return `<div class=”prog-row ${editable ? 'editable' : ''} ${colore ? 'sem-' + colore : ''}” ${attrs}>
+      <div class=”wbadge”>${esc(w.label || ('W' + (wi + 1)))}</div>
+      <div class=”prog-body”>
+        <div class=”target ${hasTarget ? '' : 'empty'}”>${hasTarget ? esc(w.obiettivo) : '—'}</div>
         ${logHtml}
         ${fb}
       </div>
@@ -276,7 +282,7 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
       toast('Inserisci serie, reps e kg'); return;
     }
     const note = m.querySelector('#logNote').value.trim();
-    doSave({ serie, reps, kg, colore, note });
+    doSave({ serie, reps, kg, colore, note, ts: new Date().toISOString() });
   });
 
   async function doSave(newLog) {

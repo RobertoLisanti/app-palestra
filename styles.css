@@ -397,6 +397,7 @@ body.auth-open { overflow: hidden; }
 .logline { margin-top: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .logval { font-size: 14.5px; font-weight: 700; color: var(--text); }
 .logval.muted { color: var(--muted); font-weight: 600; }
+.logts { font-size: 11.5px; color: var(--muted-2); font-weight: 600; margin-left: auto; }
 .lognote { width: 100%; font-size: 13px; color: var(--muted); }
 
 .logedit { align-self: center; color: var(--muted-2); display: flex; }
