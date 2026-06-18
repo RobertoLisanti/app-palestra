@@ -188,7 +188,7 @@ main#view {
 /* progression */
 .prog { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
 .prog-row {
-  display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: start;
+  display: flex; align-items: flex-start; gap: 12px;
   padding: 9px 0; border-bottom: 1px dashed var(--line);
 }
 .prog-row.editable { cursor: pointer; border-radius: 10px; }
@@ -196,13 +196,13 @@ main#view {
 .prog-row:last-child { border-bottom: none; padding-bottom: 0; }
 .prog-row.is-current .wbadge { background: var(--accent); color: var(--accent-ink); border-color: transparent; box-shadow: 0 4px 12px rgba(198,251,80,.3); }
 .wbadge {
-  align-self: start;
+  flex: none;
   width: 42px; text-align: center;
   font-weight: 800; font-size: 12.5px; color: var(--muted);
   background: var(--surface-2); border: 1px solid var(--line);
   border-radius: 9px; padding: 6px 0;
 }
-.prog-body { min-width: 0; }
+.prog-body { flex: 1; min-width: 0; }
 .target { font-size: 15px; font-weight: 650; color: var(--text); }
 .target.empty { color: var(--muted-2); font-weight: 500; font-style: italic; }
 .feedback {
