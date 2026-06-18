@@ -11,7 +11,30 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=14" />
+  <link rel="stylesheet" href="styles.css?v=15" />
+  <style>
+    /* critico: embedded per evitare cache file:// su browser locale */
+    .prog { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+    .prog-row { display: flex !important; align-items: flex-start; gap: 12px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+    .prog-row.editable { cursor: pointer; border-radius: 10px; }
+    .prog-row.editable:active { background: rgba(255,255,255,.03); }
+    .prog-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .wbadge { flex: none !important; width: 42px; text-align: center; font-weight: 800; font-size: 12.5px; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 6px 0; }
+    .prog-body { flex: 1 !important; min-width: 0; }
+    .target { font-size: 15px; font-weight: 650; color: var(--text); }
+    .target.empty { color: var(--muted-2); font-weight: 500; font-style: italic; }
+    .prog-row.sem-verde .wbadge { background: rgba(53,208,127,.14); border-color: rgba(53,208,127,.45); color: var(--ok); }
+    .prog-row.sem-giallo .wbadge { background: rgba(255,197,61,.14); border-color: rgba(255,197,61,.45); color: var(--warn); }
+    .prog-row.sem-arancio .wbadge { background: rgba(255,140,59,.14); border-color: rgba(255,140,59,.45); color: var(--arancio); }
+    .prog-row.sem-rosso .wbadge { background: rgba(255,93,93,.14); border-color: rgba(255,93,93,.45); color: var(--bad); }
+    .logline { margin-top: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .logval { font-size: 14.5px; font-weight: 700; color: var(--text); }
+    .logval.muted { color: var(--muted); font-weight: 600; }
+    .logts { font-size: 11.5px; color: var(--muted-2); font-weight: 600; margin-left: auto; }
+    .lognote { width: 100%; font-size: 13px; color: var(--muted); }
+    .logedit { align-self: center; color: var(--muted-2); display: flex; }
+    .addlog { align-self: center; white-space: nowrap; font-size: 11.5px; font-weight: 800; color: var(--accent); background: rgba(198,251,80,.10); border: 1px solid rgba(198,251,80,.22); padding: 5px 10px; border-radius: 999px; }
+  </style>
 </head>
 <body>
   <div id="app">
@@ -51,9 +74,9 @@
   </div>
 
   <div id="toast" class="toast"></div>
-  <script src="config.js?v=14"></script>
+  <script src="config.js?v=15"></script>
   <script src="vendor/supabase.js"></script>
-  <script src="app.js?v=14"></script>
-  <script src="auth.js?v=14"></script>
+  <script src="app.js?v=15"></script>
+  <script src="auth.js?v=15"></script>
 </body>
 </html>
