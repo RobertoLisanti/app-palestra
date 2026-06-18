@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const DATA_URL = 'data/schede.json';
+const CACHE_KEY = 'palestra.data';
 
 const state = {
   data: null,
@@ -56,21 +56,34 @@ function currentWeekIndex(scheda) {
   return Math.floor(days / 7); // 0-based: settimana 1 = indice 0
 }
 
-/* ---------------- data loading ---------------- */
+/* ---------------- data loading (da Supabase) ---------------- */
+function rowsToData(rows) {
+  const schede = rows.map((r) => ({
+    id: r.sched_id, fase: r.fase, num: r.num, titolo: r.titolo,
+    data: r.data, giorni: r.giorni || [], is_current: r.is_current,
+  }));
+  let cur = schede.find((s) => s.is_current);
+  if (!cur && schede.length) cur = schede[schede.length - 1];
+  return { correnteId: cur ? cur.id : null, schede };
+}
+
 async function loadData({ fresh = true } = {}) {
   try {
-    const res = await fetch(DATA_URL, { cache: fresh ? 'no-store' : 'default' });
-    if (!res.ok) throw new Error('http ' + res.status);
-    const json = await res.json();
-    state.data = json;
-    if (!state.schedaId) state.schedaId = json.correnteId;
+    const { data: rows, error } = await window.sb
+      .from('schede')
+      .select('sched_id, fase, num, titolo, data, is_current, giorni')
+      .order('fase', { ascending: true })
+      .order('num', { ascending: true });
+    if (error) throw error;
+    state.data = rowsToData(rows || []);
+    if (!state.schedaId) state.schedaId = state.data.correnteId;
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.data)); } catch (_) {}
     return true;
   } catch (e) {
-    if (state.data) return false; // tieni i dati gia' in memoria
-    // prova la cache del service worker
+    if (state.data) return false; // tieni i dati già in memoria
     try {
-      const cached = await caches.match(DATA_URL);
-      if (cached) { state.data = await cached.json(); return true; }
+      const cached = localStorage.getItem(CACHE_KEY); // copia offline
+      if (cached) { state.data = JSON.parse(cached); if (!state.schedaId) state.schedaId = state.data.correnteId; return true; }
     } catch (_) {}
     return false;
   }
@@ -82,7 +95,7 @@ function renderAttuale() {
   topTitle.textContent = 'Scheda attuale';
   topSub.textContent = sch ? sch.titolo : '';
 
-  if (!sch) { viewEl.innerHTML = emptyState('Nessuna scheda', 'Importa i dati per iniziare.'); return; }
+  if (!sch) { viewEl.innerHTML = emptyState('Ancora nessuna scheda', 'La tua scheda comparirà qui appena viene caricata.'); return; }
 
   const nGiorni = sch.giorni.length;
   const nEser = sch.giorni.reduce((a, g) => a + g.esercizi.length, 0);
@@ -268,6 +281,53 @@ refreshBtn.addEventListener('click', async () => {
   toast(ok ? 'Aggiornato ✓' : 'Offline — dati salvati');
 });
 
+/* ---------------- account (utente loggato) ---------------- */
+function onUser(user) {
+  const host = document.getElementById('accountSlot');
+  if (!host) return;
+  if (!user) { host.innerHTML = ''; return; }
+  const initial = (user.username || user.nome || user.email || '?').trim().charAt(0).toUpperCase();
+  host.innerHTML = `
+    <button id="accountBtn" class="icon-btn account-btn" aria-label="Account">${esc(initial)}</button>
+    <div id="accountMenu" class="account-menu" hidden>
+      <div class="account-info">
+        <div class="account-name">${esc(user.nome || ('@' + (user.username || 'account')))}</div>
+        <div class="account-email muted">${esc(user.username ? '@' + user.username : '')}${user.email ? ' · ' + esc(user.email) : ''}</div>
+      </div>
+      <div id="bioRow"></div>
+      <button id="logoutBtn" class="account-logout">Esci</button>
+    </div>`;
+  const btn = host.querySelector('#accountBtn');
+  const menu = host.querySelector('#accountMenu');
+  btn.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+  menu.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => { menu.hidden = true; });
+  host.querySelector('#logoutBtn').addEventListener('click', () => {
+    if (window.palestraLogout) window.palestraLogout();
+  });
+
+  // riga sblocco biometrico (se supportato dal dispositivo)
+  const bio = window.palestraBio;
+  const bioRow = host.querySelector('#bioRow');
+  if (bio) {
+    bio.available().then((ok) => {
+      if (!ok) return;
+      const render = () => {
+        const on = bio.isEnabled();
+        bioRow.innerHTML = `<button class="account-action">${on ? 'Disattiva' : 'Attiva'} sblocco impronta</button>`;
+        bioRow.querySelector('button').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            if (on) { bio.disable(); } else { await bio.enable(); }
+          } catch (_) {}
+          render();
+        });
+      };
+      render();
+    });
+  }
+}
+
 /* ---------------- boot ---------------- */
 async function boot() {
   viewEl.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
@@ -280,4 +340,8 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
 
-boot();
+// L'app viene avviata dal cancello di autenticazione (auth.js) dopo il login.
+window.PalestraApp = {
+  start() { boot(); if (window.PALESTRA_USER) onUser(window.PALESTRA_USER); },
+  onUser,
+};

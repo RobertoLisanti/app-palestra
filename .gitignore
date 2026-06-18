@@ -2,6 +2,10 @@
 **/bin/
 **/obj/
 
+# i dati NON vanno pubblicati: vivono in Supabase (privati).
+# schede.json resta solo in locale come sorgente per il seed.
+data/
+
 # os
 Thumbs.db
 .DS_Store
