@@ -306,25 +306,26 @@ function onUser(user) {
     if (window.palestraLogout) window.palestraLogout();
   });
 
-  // riga sblocco biometrico (se supportato dal dispositivo)
+  // riga sblocco biometrico — solo su telefono/tablet
   const bio = window.palestraBio;
   const bioRow = host.querySelector('#bioRow');
-  if (bio) {
-    bio.available().then((ok) => {
-      if (!ok) return;
-      const render = () => {
-        const on = bio.isEnabled();
-        bioRow.innerHTML = `<button class="account-action">${on ? 'Disattiva' : 'Attiva'} sblocco impronta</button>`;
-        bioRow.querySelector('button').addEventListener('click', async (e) => {
-          e.stopPropagation();
-          try {
-            if (on) { bio.disable(); } else { await bio.enable(); }
-          } catch (_) {}
-          render();
-        });
-      };
-      render();
-    });
+  if (bio && bio.supported()) {
+    const render = () => {
+      const on = bio.isEnabled();
+      bioRow.innerHTML = `<button class="account-action">${on ? 'Disattiva' : 'Attiva'} sblocco impronta</button>`;
+      bioRow.querySelector('button').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          if (on) { bio.disable(); toast('Sblocco impronta disattivato'); }
+          else { await bio.enable(); toast('Sblocco impronta attivato ✓'); }
+        } catch (err) {
+          const m = String(err && err.message || err).toLowerCase();
+          toast(m.includes('not allowed') || m.includes('abort') ? 'Operazione annullata' : 'Impronta non disponibile su questo browser');
+        }
+        render();
+      });
+    };
+    render();
   }
 }
 

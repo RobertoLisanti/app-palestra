@@ -64,8 +64,17 @@
   }
   function bioDisable() { localStorage.removeItem(BIO_ID); localStorage.removeItem(BIO_USER); }
 
+  // il biometrico ha senso solo su telefono/tablet, non su desktop
+  function isMobileDevice() {
+    const ua = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+    const touch = (navigator.maxTouchPoints || 0) > 0;
+    return ua || (coarse && touch);
+  }
+
   // API biometrico per l'app (menu account)
   window.palestraBio = {
+    supported() { return isMobileDevice() && !!window.PublicKeyCredential; },
     available: bioAvailable,
     isEnabled: bioEnabled,
     async enable() {
@@ -287,7 +296,7 @@
   /* ---------------- proposta attivazione biometrico ---------------- */
   async function maybeOfferBio() {
     if (bioEnabled()) return;
-    if (!(await bioAvailable())) return;
+    if (!window.palestraBio.supported()) return;       // solo su telefono
     if (localStorage.getItem('palestra.bio.declined')) return;
     const wrap = document.createElement('div');
     wrap.className = 'bio-prompt';
