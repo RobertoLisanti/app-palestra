@@ -4,17 +4,17 @@
    (richieste cross-origin, non cacheate qui; copia offline in
    localStorage lato app). Bump SHELL_VERSION quando cambi i file.
    ============================================================ */
-const SHELL_VERSION = 'shell-v7';
+const SHELL_VERSION = 'shell-v8';
 
 // gli asset versionati (?v=) corrispondono a quelli richiesti da index.html,
 // così la cache-first li serve offline e ogni bump di versione li rinfresca.
 const SHELL_ASSETS = [
   './',
   './index.html',
-  './styles.css?v=7',
-  './app.js?v=7',
-  './auth.js?v=7',
-  './config.js?v=7',
+  './styles.css?v=8',
+  './app.js?v=8',
+  './auth.js?v=8',
+  './config.js?v=8',
   './vendor/supabase.js',
   './manifest.webmanifest',
   './icons/icon.svg',

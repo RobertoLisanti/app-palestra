@@ -17,6 +17,9 @@
   --orange: #ff8a4c;
   --violet: #9b8cff;
   --danger: #ff6b6b;
+  --ok: #35d07f;
+  --warn: #ffc53d;
+  --bad: #ff5d5d;
   --radius: 18px;
   --radius-sm: 12px;
   --shadow: 0 10px 30px rgba(0,0,0,.35);
@@ -184,9 +187,11 @@ main#view {
 /* progression */
 .prog { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
 .prog-row {
-  display: grid; grid-template-columns: 42px 1fr; gap: 12px;
+  display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: start;
   padding: 9px 0; border-bottom: 1px dashed var(--line);
 }
+.prog-row.editable { cursor: pointer; border-radius: 10px; }
+.prog-row.editable:active { background: rgba(255,255,255,.03); }
 .prog-row:last-child { border-bottom: none; padding-bottom: 0; }
 .prog-row.is-current .wbadge { background: var(--accent); color: var(--accent-ink); border-color: transparent; box-shadow: 0 4px 12px rgba(198,251,80,.3); }
 .wbadge {
@@ -380,3 +385,83 @@ main#view {
 .auth-hint a { color: var(--accent); font-weight: 700; cursor: pointer; text-decoration: none; }
 body.auth-open { overflow: hidden; }
 .field .opt { color: var(--muted-2); font-style: normal; font-weight: 600; }
+
+/* ---------- Data entry: risultato segnato ---------- */
+.sem { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.sem.c-verde { background: var(--ok); }
+.sem.c-giallo { background: var(--warn); }
+.sem.c-rosso { background: var(--bad); }
+
+.logline { margin-top: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.logval { font-size: 14.5px; font-weight: 700; color: var(--text); }
+.logval.muted { color: var(--muted); font-weight: 600; }
+.lognote { width: 100%; font-size: 13px; color: var(--muted); }
+
+.logedit { align-self: center; color: var(--muted-2); display: flex; }
+.addlog {
+  align-self: center; white-space: nowrap;
+  font-size: 11.5px; font-weight: 800; color: var(--accent);
+  background: rgba(198,251,80,.10); border: 1px solid rgba(198,251,80,.22);
+  padding: 5px 10px; border-radius: 999px;
+}
+/* semaforo sul badge della settimana */
+.prog-row.sem-verde .wbadge { background: rgba(53,208,127,.14); border-color: rgba(53,208,127,.45); color: var(--ok); }
+.prog-row.sem-giallo .wbadge { background: rgba(255,197,61,.14); border-color: rgba(255,197,61,.45); color: var(--warn); }
+.prog-row.sem-rosso .wbadge { background: rgba(255,93,93,.14); border-color: rgba(255,93,93,.45); color: var(--bad); }
+.prog-row.is-current.sem-verde .wbadge,
+.prog-row.is-current.sem-giallo .wbadge,
+.prog-row.is-current.sem-rosso .wbadge { box-shadow: none; }
+
+/* ---------- Bottom sheet inserimento ---------- */
+body.sheet-open { overflow: hidden; }
+.sheet-backdrop {
+  position: fixed; inset: 0; z-index: 120; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(5,7,11,.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  animation: fade .2s ease;
+}
+.sheet {
+  width: 100%; max-width: 480px;
+  background: var(--surface); border: 1px solid var(--line); border-bottom: none;
+  border-radius: 24px 24px 0 0; box-shadow: var(--shadow);
+  padding: 10px 18px calc(18px + var(--safe-bottom));
+  animation: sheetup .28s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes sheetup { from { transform: translateY(40px); opacity: .5; } to { transform: none; opacity: 1; } }
+.sheet-grab { width: 40px; height: 4px; border-radius: 99px; background: var(--surface-3); margin: 2px auto 14px; }
+.sheet-head { margin-bottom: 16px; }
+.sheet-ex { font-size: 17px; font-weight: 750; letter-spacing: -.2px; }
+.sheet-sub { font-size: 13px; margin-top: 3px; }
+.sheet-body { display: flex; flex-direction: column; gap: 14px; }
+.log-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.field-sm > span { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin: 0 0 6px 2px; }
+.field-sm input, .field-sm textarea {
+  width: 100%; padding: 12px; font-size: 16px; color: var(--text);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 11px; outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.field-sm input:focus, .field-sm textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(198,251,80,.12); }
+.field-sm textarea { resize: none; font-family: inherit; line-height: 1.4; }
+.sem-pick { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.sem-pick button {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 12px 6px; border-radius: 11px; cursor: pointer;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--muted);
+  font-weight: 700; font-size: 13px; transition: all .14s ease;
+}
+.sem-pick button[data-c="verde"].on { color: var(--ok); border-color: var(--ok); background: rgba(53,208,127,.12); }
+.sem-pick button[data-c="giallo"].on { color: var(--warn); border-color: var(--warn); background: rgba(255,197,61,.12); }
+.sem-pick button[data-c="rosso"].on { color: var(--bad); border-color: var(--bad); background: rgba(255,93,93,.12); }
+.sheet-actions { display: flex; gap: 10px; margin-top: 20px; }
+.btn-ghost {
+  flex: 0 0 auto; padding: 13px 16px; border-radius: 12px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--text); font-weight: 700; font-size: 15px;
+}
+.btn-ghost:active { background: var(--surface-3); }
+.btn-primary {
+  flex: 1; padding: 13px; border-radius: 12px; border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink);
+  font-weight: 800; font-size: 16px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-primary:active { transform: scale(.98); }
+.btn-primary:disabled { filter: saturate(.6) brightness(.9); cursor: default; }

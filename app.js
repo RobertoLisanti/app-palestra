@@ -120,7 +120,7 @@ function renderAttuale() {
   const giorno = sch.giorni[state.dayIndex];
   const curWeek = currentWeekIndex(sch);
   html += `<div class="section-head"><h3>${esc(giorno.nome)}</h3><span class="count">${giorno.esercizi.length} esercizi</span></div>`;
-  html += giorno.esercizi.map((e, i) => exerciseCard(e, i, curWeek)).join('');
+  html += giorno.esercizi.map((e, i) => exerciseCard(e, i, curWeek, { editable: true, schedId: sch.id, dayIndex: state.dayIndex })).join('');
 
   viewEl.innerHTML = html;
   viewEl.querySelectorAll('.day-pill').forEach((b) =>
@@ -133,7 +133,8 @@ function cleanDay(nome, i) {
   return m || '';
 }
 
-function exerciseCard(e, index, curWeek) {
+function exerciseCard(e, index, curWeek, ctx) {
+  const editable = !!(ctx && ctx.editable);
   const notes = (e.note || []).filter(Boolean);
   const weeks = e.settimane || [];
   const rest = e.recupero
@@ -147,14 +148,34 @@ function exerciseCard(e, index, curWeek) {
   const progHtml = weeks.length ? `<div class="prog">${weeks.map((w, wi) => {
     const isCur = wi === curWeek;
     const hasTarget = !!(w.obiettivo && w.obiettivo.trim());
-    const fb = (w.feedback && w.feedback.trim() && w.feedback.trim() !== (w.obiettivo || '').trim())
+    const log = w.log || null;
+    const colore = (log && log.colore) || '';
+    // risultato segnato (data entry)
+    let logHtml = '';
+    if (log && (log.serie || log.reps || log.kg || log.note)) {
+      const parts = [];
+      if (log.serie || log.reps) parts.push(`${esc(log.serie || '–')}×${esc(log.reps || '–')}`);
+      if (log.kg) parts.push(`${esc(log.kg)} kg`);
+      const summary = parts.join(' · ');
+      logHtml = `<div class="logline">${summary ? `<span class="logval">${summary}</span>` : '<span class="logval muted">segnato</span>'}${log.note ? `<span class="lognote">${esc(log.note)}</span>` : ''}</div>`;
+    }
+    // feedback storico (solo se non c'è un log)
+    const fb = (!log && w.feedback && w.feedback.trim() && w.feedback.trim() !== (w.obiettivo || '').trim())
       ? `<div class="feedback"><span class="q">”</span><span>${esc(w.feedback)}</span></div>` : '';
-    return `<div class="prog-row ${isCur ? 'is-current' : ''}">
+    const attrs = editable ? `data-sch="${esc(ctx.schedId)}" data-day="${ctx.dayIndex}" data-ex="${index}" data-wk="${wi}"` : '';
+    const action = editable
+      ? (log
+        ? `<span class="logedit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>`
+        : `<span class="addlog">+ segna</span>`)
+      : '';
+    return `<div class="prog-row ${isCur ? 'is-current' : ''} ${editable ? 'editable' : ''} ${colore ? 'sem-' + colore : ''}" ${attrs}>
       <div class="wbadge">${esc(w.label || ('W' + (wi + 1)))}</div>
       <div class="prog-body">
         <div class="target ${hasTarget ? '' : 'empty'}">${hasTarget ? esc(w.obiettivo) : '—'}${isCur ? '<span class="cur-tag">ora</span>' : ''}</div>
+        ${logHtml}
         ${fb}
       </div>
+      ${action}
     </div>`;
   }).join('')}</div>` : '';
 
@@ -167,6 +188,95 @@ function exerciseCard(e, index, curWeek) {
     ${notesHtml}
     ${progHtml}
   </article>`;
+}
+
+/* ---------------- data entry (log settimana) ---------------- */
+async function persistGiorni(sch) {
+  const { error } = await window.sb.from('schede').update({ giorni: sch.giorni }).eq('sched_id', sch.id);
+  if (error) throw error;
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.data)); } catch (_) {}
+}
+
+function openLogModal(schId, dayIdx, exIdx, wkIdx) {
+  const sch = schedaById(schId);
+  const ex = sch && sch.giorni[dayIdx] && sch.giorni[dayIdx].esercizi[exIdx];
+  const wk = ex && ex.settimane[wkIdx];
+  if (!wk) return;
+  const log = wk.log || {};
+  let colore = log.colore || '';
+
+  const m = document.createElement('div');
+  m.className = 'sheet-backdrop';
+  m.innerHTML = `
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-grab"></div>
+      <div class="sheet-head">
+        <div class="sheet-ex">${esc(ex.nome)}</div>
+        <div class="sheet-sub muted">${esc(wk.label || ('W' + (wkIdx + 1)))}${wk.obiettivo ? ' · obiettivo: ' + esc(wk.obiettivo) : ''}</div>
+      </div>
+      <div class="sheet-body">
+        <div class="log-grid">
+          <label class="field-sm"><span>Serie</span><input id="logSerie" inputmode="numeric" value="${esc(log.serie || '')}" placeholder="4" /></label>
+          <label class="field-sm"><span>Reps</span><input id="logReps" inputmode="text" value="${esc(log.reps || '')}" placeholder="8" /></label>
+          <label class="field-sm"><span>Kg</span><input id="logKg" inputmode="text" value="${esc(log.kg || '')}" placeholder="50" /></label>
+        </div>
+        <div class="field-sm"><span>Com'è andata</span>
+          <div class="sem-pick" id="logColore">
+            <button type="button" data-c="verde" class="${log.colore === 'verde' ? 'on' : ''}"><span class="sem c-verde"></span>Bene</button>
+            <button type="button" data-c="giallo" class="${log.colore === 'giallo' ? 'on' : ''}"><span class="sem c-giallo"></span>Così così</button>
+            <button type="button" data-c="rosso" class="${log.colore === 'rosso' ? 'on' : ''}"><span class="sem c-rosso"></span>Dura</button>
+          </div>
+        </div>
+        <label class="field-sm"><span>Note</span><textarea id="logNote" rows="2" placeholder="Sensazioni, dettagli…">${esc(log.note || '')}</textarea></label>
+      </div>
+      <div class="sheet-actions">
+        ${wk.log ? '<button class="btn-ghost" id="logClear">Svuota</button>' : ''}
+        <button class="btn-ghost" id="logCancel">Annulla</button>
+        <button class="btn-primary" id="logSave"><span class="lbl">Salva</span><span class="spin-dot" hidden></span></button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  document.body.classList.add('sheet-open');
+
+  m.querySelectorAll('#logColore button').forEach((b) => b.addEventListener('click', () => {
+    colore = colore === b.dataset.c ? '' : b.dataset.c;
+    m.querySelectorAll('#logColore button').forEach((x) => x.classList.toggle('on', x.dataset.c === colore));
+  }));
+
+  const close = () => { m.remove(); document.body.classList.remove('sheet-open'); };
+  m.addEventListener('click', (e) => { if (e.target === m) close(); });
+  m.querySelector('#logCancel').addEventListener('click', close);
+  const clearBtn = m.querySelector('#logClear');
+  if (clearBtn) clearBtn.addEventListener('click', () => doSave(null));
+  m.querySelector('#logSave').addEventListener('click', () => {
+    const newLog = {
+      serie: m.querySelector('#logSerie').value.trim(),
+      reps: m.querySelector('#logReps').value.trim(),
+      kg: m.querySelector('#logKg').value.trim(),
+      colore,
+      note: m.querySelector('#logNote').value.trim(),
+    };
+    const empty = !newLog.serie && !newLog.reps && !newLog.kg && !newLog.colore && !newLog.note;
+    doSave(empty ? null : newLog);
+  });
+
+  async function doSave(newLog) {
+    const saveBtn = m.querySelector('#logSave');
+    const spin = saveBtn.querySelector('.spin-dot'), lbl = saveBtn.querySelector('.lbl');
+    saveBtn.disabled = true; spin.hidden = false; lbl.style.opacity = '.5';
+    const prev = wk.log;
+    if (newLog) wk.log = newLog; else delete wk.log;
+    try {
+      await persistGiorni(sch);
+      close();
+      if (state.view === 'attuale') renderAttuale(); else if (state.view === 'dettaglio') renderDetail();
+      toast('Salvato ✓');
+    } catch (err) {
+      if (prev !== undefined) wk.log = prev; else delete wk.log;
+      saveBtn.disabled = false; spin.hidden = true; lbl.style.opacity = '1';
+      toast('Salvataggio non riuscito (sei offline?)');
+    }
+  }
 }
 
 /* ---------------- render: STORICO ---------------- */
@@ -271,6 +381,13 @@ function setView(v) {
 /* ---------------- events ---------------- */
 document.querySelectorAll('.tab').forEach((t) =>
   t.addEventListener('click', () => setView(t.dataset.view)));
+
+// tap su una settimana (scheda attuale) -> apri inserimento dati
+viewEl.addEventListener('click', (e) => {
+  const row = e.target.closest('.prog-row.editable');
+  if (!row) return;
+  openLogModal(row.dataset.sch, +row.dataset.day, +row.dataset.ex, +row.dataset.wk);
+});
 
 const refreshBtn = document.getElementById('refreshBtn');
 refreshBtn.addEventListener('click', async () => {
