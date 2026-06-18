@@ -151,7 +151,7 @@ function exerciseCard(e, index, curWeek, ctx) {
     ? `<div class="notes">${notes.map((n) => `<div class="note"><span class="dot">›</span><span>${esc(n)}</span></div>`).join('')}</div>`
     : '';
 
-  const progHtml = weeks.length ? `<div class=”prog”>${weeks.map((w, wi) => {
+  const progHtml = weeks.length ? `<div class="prog">${weeks.map((w, wi) => {
     const hasTarget = !!(w.obiettivo && w.obiettivo.trim());
     const log = w.log || null;
     const colore = (log && log.colore) || '';
@@ -162,25 +162,25 @@ function exerciseCard(e, index, curWeek, ctx) {
       if (log.serie || log.reps) parts.push(`${esc(log.serie || '–')}×${esc(log.reps || '–')}`);
       if (log.kg) parts.push(`${esc(log.kg)} kg`);
       const summary = parts.join(' · ');
-      const tsHtml = log.ts ? `<span class=”logts”>${fmtTs(log.ts)}</span>` : '';
-      const noteHtml = log.note ? `<span class=”lognote”>Note: ${esc(log.note)}</span>` : '';
+      const tsHtml = log.ts ? `<span class="logts">${fmtTs(log.ts)}</span>` : '';
+      const noteHtml = log.note ? `<span class="lognote">Note: ${esc(log.note)}</span>` : '';
       if (summary || tsHtml || noteHtml) {
-        logHtml = `<div class=”logline”>${summary ? `<span class=”logval”>${summary}</span>` : ''}${tsHtml}${noteHtml}</div>`;
+        logHtml = `<div class="logline">${summary ? `<span class="logval">${summary}</span>` : ''}${tsHtml}${noteHtml}</div>`;
       }
     }
     // feedback storico (solo se non c'è un log)
     const fb = (!log && w.feedback && w.feedback.trim() && w.feedback.trim() !== (w.obiettivo || '').trim())
-      ? `<div class=”feedback”><span class=”q”>”</span><span>${esc(w.feedback)}</span></div>` : '';
-    const attrs = editable ? `data-sch=”${esc(ctx.schedId)}” data-day=”${ctx.dayIndex}” data-ex=”${index}” data-wk=”${wi}”` : '';
+      ? `<div class="feedback"><span class="q">”</span><span>${esc(w.feedback)}</span></div>` : '';
+    const attrs = editable ? `data-sch="${esc(ctx.schedId)}" data-day="${ctx.dayIndex}" data-ex="${index}" data-wk="${wi}"` : '';
     const action = editable
       ? (log
-        ? `<span class=”logedit”><svg viewBox=”0 0 24 24” width=”16” height=”16” fill=”none” stroke=”currentColor” stroke-width=”2” stroke-linecap=”round” stroke-linejoin=”round”><path d=”M12 20h9”/><path d=”M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z”/></svg></span>`
-        : `<span class=”addlog”>+ segna</span>`)
+        ? `<span class="logedit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>`
+        : `<span class="addlog">+ segna</span>`)
       : '';
-    return `<div class=”prog-row ${editable ? 'editable' : ''} ${colore ? 'sem-' + colore : ''}” ${attrs}>
-      <div class=”wbadge”>${esc(w.label || ('W' + (wi + 1)))}</div>
-      <div class=”prog-body”>
-        <div class=”target ${hasTarget ? '' : 'empty'}”>${hasTarget ? esc(w.obiettivo) : '—'}</div>
+    return `<div class="prog-row ${editable ? 'editable' : ''} ${colore ? 'sem-' + colore : ''}" ${attrs}>
+      <div class="wbadge">${esc(w.label || ('W' + (wi + 1)))}</div>
+      <div class="prog-body">
+        <div class="target ${hasTarget ? '' : 'empty'}">${hasTarget ? esc(w.obiettivo) : '—'}</div>
         ${logHtml}
         ${fb}
       </div>
