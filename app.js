@@ -222,9 +222,10 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
         </div>
         <div class="field-sm"><span>Com'è andata</span>
           <div class="sem-pick" id="logColore">
-            <button type="button" data-c="verde" class="${log.colore === 'verde' ? 'on' : ''}"><span class="sem c-verde"></span>Bene</button>
-            <button type="button" data-c="giallo" class="${log.colore === 'giallo' ? 'on' : ''}"><span class="sem c-giallo"></span>Così così</button>
-            <button type="button" data-c="rosso" class="${log.colore === 'rosso' ? 'on' : ''}"><span class="sem c-rosso"></span>Dura</button>
+            <button type="button" data-c="verde" class="${log.colore === 'verde' ? 'on' : ''}"><span class="sem c-verde"></span>Senza problemi</button>
+            <button type="button" data-c="giallo" class="${log.colore === 'giallo' ? 'on' : ''}"><span class="sem c-giallo"></span>A fatica</button>
+            <button type="button" data-c="arancio" class="${log.colore === 'arancio' ? 'on' : ''}"><span class="sem c-arancio"></span>Non concluso</button>
+            <button type="button" data-c="rosso" class="${log.colore === 'rosso' ? 'on' : ''}"><span class="sem c-rosso"></span>Non fatto</button>
           </div>
         </div>
         <label class="field-sm"><span>Note</span><textarea id="logNote" rows="2" placeholder="Sensazioni, dettagli…">${esc(log.note || '')}</textarea></label>

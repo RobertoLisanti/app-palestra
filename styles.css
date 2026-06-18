@@ -19,6 +19,7 @@
   --danger: #ff6b6b;
   --ok: #35d07f;
   --warn: #ffc53d;
+  --arancio: #ff8c3b;
   --bad: #ff5d5d;
   --radius: 18px;
   --radius-sm: 12px;
@@ -390,6 +391,7 @@ body.auth-open { overflow: hidden; }
 .sem { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 .sem.c-verde { background: var(--ok); }
 .sem.c-giallo { background: var(--warn); }
+.sem.c-arancio { background: var(--arancio); }
 .sem.c-rosso { background: var(--bad); }
 
 .logline { margin-top: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -407,9 +409,11 @@ body.auth-open { overflow: hidden; }
 /* semaforo sul badge della settimana */
 .prog-row.sem-verde .wbadge { background: rgba(53,208,127,.14); border-color: rgba(53,208,127,.45); color: var(--ok); }
 .prog-row.sem-giallo .wbadge { background: rgba(255,197,61,.14); border-color: rgba(255,197,61,.45); color: var(--warn); }
+.prog-row.sem-arancio .wbadge { background: rgba(255,140,59,.14); border-color: rgba(255,140,59,.45); color: var(--arancio); }
 .prog-row.sem-rosso .wbadge { background: rgba(255,93,93,.14); border-color: rgba(255,93,93,.45); color: var(--bad); }
 .prog-row.is-current.sem-verde .wbadge,
 .prog-row.is-current.sem-giallo .wbadge,
+.prog-row.is-current.sem-arancio .wbadge,
 .prog-row.is-current.sem-rosso .wbadge { box-shadow: none; }
 
 /* ---------- Bottom sheet inserimento ---------- */
@@ -441,15 +445,16 @@ body.sheet-open { overflow: hidden; }
 }
 .field-sm input:focus, .field-sm textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(198,251,80,.12); }
 .field-sm textarea { resize: none; font-family: inherit; line-height: 1.4; }
-.sem-pick { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.sem-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .sem-pick button {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 12px 6px; border-radius: 11px; cursor: pointer;
+  display: flex; align-items: center; justify-content: flex-start; gap: 8px;
+  padding: 12px 12px; border-radius: 11px; cursor: pointer;
   background: var(--bg-2); border: 1px solid var(--line); color: var(--muted);
   font-weight: 700; font-size: 13px; transition: all .14s ease;
 }
 .sem-pick button[data-c="verde"].on { color: var(--ok); border-color: var(--ok); background: rgba(53,208,127,.12); }
 .sem-pick button[data-c="giallo"].on { color: var(--warn); border-color: var(--warn); background: rgba(255,197,61,.12); }
+.sem-pick button[data-c="arancio"].on { color: var(--arancio); border-color: var(--arancio); background: rgba(255,140,59,.12); }
 .sem-pick button[data-c="rosso"].on { color: var(--bad); border-color: var(--bad); background: rgba(255,93,93,.12); }
 .sheet-actions { display: flex; gap: 10px; margin-top: 20px; }
 .btn-ghost {
