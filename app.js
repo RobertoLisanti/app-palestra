@@ -163,7 +163,8 @@ function exerciseCard(e, index, curWeek, ctx) {
       if (log.kg) parts.push(`${esc(log.kg)} kg`);
       const summary = parts.join(' · ');
       const tsHtml = log.ts ? `<span class=”logts”>${fmtTs(log.ts)}</span>` : '';
-      logHtml = `<div class=”logline”>${summary ? `<span class=”logval”>${summary}</span>` : '<span class=”logval muted”>segnato</span>'}${tsHtml}${log.note ? `<span class=”lognote”>${esc(log.note)}</span>` : ''}</div>`;
+      const noteHtml = log.note ? `<div class=”logline”><span class=”lognote”>Note: ${esc(log.note)}</span></div>` : '';
+      logHtml = `${summary || tsHtml ? `<div class=”logline”>${summary ? `<span class=”logval”>${summary}</span>` : ''}${tsHtml}</div>` : ''}${noteHtml}`;
     }
     // feedback storico (solo se non c'è un log)
     const fb = (!log && w.feedback && w.feedback.trim() && w.feedback.trim() !== (w.obiettivo || '').trim())
