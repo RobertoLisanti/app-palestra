@@ -43,7 +43,7 @@
   async function bioEnroll(username) {
     const cred = await navigator.credentials.create({ publicKey: {
       challenge: randBytes(32),
-      rp: { name: 'Palestra', id: location.hostname },
+      rp: { name: 'AndyGym', id: location.hostname },
       user: { id: randBytes(16), name: username || 'utente', displayName: username || 'utente' },
       pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
       authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
@@ -83,7 +83,7 @@
     <div class="auth-card">
       <div class="auth-brand">
         <span class="brand-mark"></span>
-        <div><h1>Palestra</h1><p class="muted">La tua area allenamenti</p></div>
+        <div><h1>AndyGym</h1><p class="muted">La tua area allenamenti</p></div>
       </div>
 
       <!-- schermata sblocco biometrico -->

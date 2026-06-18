@@ -337,7 +337,22 @@ async function boot() {
 }
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // auto-aggiornamento: quando un nuovo service worker prende il controllo,
+  // ricarica una sola volta così l'app mostra subito la versione aggiornata.
+  let reloading = false;
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading || !hadController) return;
+    reloading = true;
+    location.reload();
+  });
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('sw.js');
+      reg.update();
+      setInterval(() => reg.update(), 60 * 60 * 1000); // controlla aggiornamenti ogni ora
+    } catch (_) {}
+  });
 }
 
 // L'app viene avviata dal cancello di autenticazione (auth.js) dopo il login.

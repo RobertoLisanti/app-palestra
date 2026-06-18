@@ -1,6 +1,6 @@
 {
-  "name": "Palestra — Le mie schede",
-  "short_name": "Palestra",
+  "name": "AndyGym — Le mie schede",
+  "short_name": "AndyGym",
   "description": "Le mie schede di allenamento e la progressione settimana per settimana.",
   "start_url": "./index.html",
   "scope": "./",
