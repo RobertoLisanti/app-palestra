@@ -597,6 +597,16 @@ const STATUS_META = {
   blocked: { lbl: 'Bloccato', cls: 'st-blocked' },
 };
 
+const ADMIN_ICONS = {
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  ban: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>',
+};
+
+function iconBtn(act, id, label, svg, cls) {
+  return `<button class="u-ic ${cls || ''}" data-act="${act}" data-id="${esc(id)}" title="${esc(label)}" aria-label="${esc(label)}">${svg}</button>`;
+}
+
 function adminUserRow(u) {
   const sm = STATUS_META[u.status] || STATUS_META.pending;
   const fullName = [u.nome, u.cognome].filter(Boolean).join(' ');
@@ -610,10 +620,10 @@ function adminUserRow(u) {
   if (u.is_self) {
     actions = '<span class="u-self">Tu · proprietario</span>';
   } else {
-    const del = `<button class="u-btn danger" data-act="delete" data-id="${esc(u.id)}">Elimina</button>`;
-    if (u.status === 'pending') actions = `<button class="u-btn primary" data-act="approve" data-id="${esc(u.id)}">Approva</button>${del}`;
-    else if (u.status === 'approved') actions = `<button class="u-btn" data-act="block" data-id="${esc(u.id)}">Blocca</button>${del}`;
-    else actions = `<button class="u-btn primary" data-act="approve" data-id="${esc(u.id)}">Sblocca</button>${del}`;
+    const del = iconBtn('delete', u.id, 'Elimina', ADMIN_ICONS.trash, 'danger');
+    if (u.status === 'pending') actions = iconBtn('approve', u.id, 'Approva', ADMIN_ICONS.check, 'ok') + del;
+    else if (u.status === 'approved') actions = iconBtn('block', u.id, 'Blocca', ADMIN_ICONS.ban, 'warn') + del;
+    else actions = iconBtn('approve', u.id, 'Sblocca', ADMIN_ICONS.check, 'ok') + del;
   }
   return `<div class="at-row" data-uid="${esc(u.id)}">
     <div class="at-user" data-label="">
@@ -717,6 +727,7 @@ function openAdmin() {
       <div class="admin-wrap">
         <div class="admin-kpis" id="adminKpis"></div>
         <div class="admin-stats" id="adminStats"></div>
+        <div id="adminSpark"></div>
         <div class="admin-tools">
           <div class="admin-search">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -733,6 +744,7 @@ function openAdmin() {
   const subEl = m.querySelector('#adminSub');
   const kpisEl = m.querySelector('#adminKpis');
   const statsEl = m.querySelector('#adminStats');
+  const sparkEl = m.querySelector('#adminSpark');
   const resultEl = m.querySelector('#adminResult');
   const searchEl = m.querySelector('#adminSearch');
 
@@ -764,24 +776,62 @@ function openAdmin() {
       act: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
       list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>',
     };
-    const card = (ico, n, label, accent) =>
-      `<div class="stat ${accent}"><div class="stat-ico">${ico}</div><div class="stat-txt"><span class="stat-n">${n}</span><span class="stat-l">${label}</span></div></div>`;
+    // le insight cliccabili (data-f) fanno da smart-filter; "Schede totali" è solo informativa
+    const card = (ico, n, label, accent, f) =>
+      `<div class="stat ${accent} ${f ? 'is-filter' : 'is-static'} ${f && filter === f ? 'on' : ''}"${f ? ` data-f="${f}"` : ''}><div class="stat-ico">${ico}</div><div class="stat-txt"><span class="stat-n">${n}</span><span class="stat-l">${label}</span></div></div>`;
     statsEl.innerHTML =
-      card(ICON.add, newWeek, 'Nuovi (7 gg)', 'cyan') +
-      card(ICON.mail, toConfirm, 'Email da confermare', 'warn') +
-      card(ICON.act, active7, 'Attivi (7 gg)', 'green') +
-      card(ICON.list, totSchede, 'Schede totali', 'viol');
+      card(ICON.add, newWeek, 'Nuovi (7 gg)', 'cyan', 'new7') +
+      card(ICON.mail, toConfirm, 'Email da confermare', 'warn', 'unconfirmed') +
+      card(ICON.act, active7, 'Attivi (7 gg)', 'green', 'active7') +
+      card(ICON.list, totSchede, 'Schede totali', 'viol', '');
+  }
+
+  function renderSpark() {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const days = [];
+    for (let i = 6; i >= 0; i--) { const d = new Date(today); d.setDate(d.getDate() - i); days.push({ t: d.getTime(), n: 0 }); }
+    all.forEach((u) => {
+      if (!u.created_at) return;
+      const d = new Date(u.created_at); if (isNaN(d)) return; d.setHours(0, 0, 0, 0);
+      const b = days.find((x) => x.t === d.getTime()); if (b) b.n++;
+    });
+    const tot = days.reduce((s, x) => s + x.n, 0);
+    const max = Math.max(1, ...days.map((x) => x.n));
+    const ini = ['D', 'L', 'M', 'M', 'G', 'V', 'S'];
+    const bars = days.map((x, i) => {
+      const h = x.n ? 6 + (x.n / max) * 30 : 2;
+      const bw = 10, gap = (100 - bw * 7) / 6;
+      const xx = i * (bw + gap);
+      return `<rect x="${xx.toFixed(2)}" y="${(38 - h).toFixed(2)}" width="${bw}" height="${h.toFixed(2)}" rx="2" class="${x.n ? 'sb-on' : 'sb-off'}"><title>${ini[new Date(x.t).getDay()]}: ${x.n}</title></rect>`;
+    }).join('');
+    const labels = days.map((x) => `<span>${ini[new Date(x.t).getDay()]}</span>`).join('');
+    sparkEl.innerHTML = `<div class="spark-card">
+      <div class="spark-top"><span class="spark-title">Iscrizioni · ultimi 7 giorni</span><span class="spark-tot">+${tot}</span></div>
+      <svg class="spark-svg" viewBox="0 0 100 40" preserveAspectRatio="none">${bars}</svg>
+      <div class="spark-axis">${labels}</div>
+    </div>`;
+  }
+
+  function matchFilter(u) {
+    const now = Date.now(), WEEK = 7 * 86400000;
+    const within = (d) => { const t = new Date(d).getTime(); return !isNaN(t) && (now - t) <= WEEK; };
+    switch (filter) {
+      case 'pending': case 'approved': case 'blocked': return u.status === filter;
+      case 'new7': return u.created_at && within(u.created_at);
+      case 'unconfirmed': return !u.email_confirmed;
+      case 'active7': return u.last_sign_in_at && within(u.last_sign_in_at);
+      default: return true;
+    }
   }
 
   function renderList() {
-    let list = all;
-    if (filter !== 'all') list = list.filter((u) => u.status === filter);
+    let list = all.filter(matchFilter);
     if (query) {
       const q = query.toLowerCase();
-      list = list.filter((u) => ((u.nome || '') + ' ' + (u.username || '') + ' ' + (u.email || '')).toLowerCase().includes(q));
+      list = list.filter((u) => ((u.nome || '') + ' ' + (u.cognome || '') + ' ' + (u.username || '') + ' ' + (u.email || '')).toLowerCase().includes(q));
     }
     if (!list.length) {
-      resultEl.innerHTML = `<div class="admin-empty">Nessun utente${query ? ' per “' + esc(query) + '”' : filter !== 'all' ? ' in questo stato' : ''}.</div>`;
+      resultEl.innerHTML = `<div class="admin-empty">Nessun utente${query ? ' per “' + esc(query) + '”' : filter !== 'all' ? ' con questo criterio' : ''}.</div>`;
       return;
     }
     resultEl.innerHTML = `<div class="admin-table">
@@ -793,12 +843,14 @@ function openAdmin() {
   }
 
   function setFilter(f) {
-    filter = f;
+    filter = (filter === f && f !== 'all') ? 'all' : f; // ri-cliccare lo stesso filtro lo annulla
     renderKpis();
+    renderStats();
     renderList();
   }
 
   kpisEl.addEventListener('click', (e) => { const b = e.target.closest('.kpi'); if (b) setFilter(b.dataset.f); });
+  statsEl.addEventListener('click', (e) => { const b = e.target.closest('.stat.is-filter'); if (b) setFilter(b.dataset.f); });
   searchEl.addEventListener('input', () => { query = searchEl.value.trim(); renderList(); });
 
   async function load() {
@@ -807,6 +859,7 @@ function openAdmin() {
       all = users || [];
       renderKpis();
       renderStats();
+      renderSpark();
       renderList();
     } catch (err) {
       resultEl.innerHTML = `<div class="admin-err">${esc(err.message || 'Errore di caricamento')}</div>`;
@@ -818,7 +871,7 @@ function openAdmin() {
   refreshBtn.addEventListener('click', async () => { refreshBtn.classList.add('spin'); await load(); refreshBtn.classList.remove('spin'); });
 
   resultEl.addEventListener('click', async (e) => {
-    const b = e.target.closest('.u-btn');
+    const b = e.target.closest('.u-ic');
     if (!b) {
       const row = e.target.closest('.at-row');
       if (row) { const u = all.find((x) => x.id === row.dataset.uid); if (u) openUserDetail(u); }
