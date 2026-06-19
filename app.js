@@ -440,6 +440,7 @@ function onUser(user) {
         <div class="account-name">${esc(user.nome || ('@' + (user.username || 'account')))}${isOwner ? '<span class="owner-tag">proprietario</span>' : ''}</div>
         <div class="account-email muted">${esc(user.username ? '@' + user.username : '')}${user.email ? ' · ' + esc(user.email) : ''}</div>
       </div>
+      <button id="profileBtn" class="account-action">Il mio profilo</button>
       ${isOwner ? '<button id="adminBtn" class="account-action">Gestione utenti</button>' : ''}
       <button id="logoutBtn" class="account-logout">Esci</button>
     </div>`;
@@ -448,11 +449,131 @@ function onUser(user) {
   btn.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
   menu.addEventListener('click', (e) => e.stopPropagation());
   document.addEventListener('click', () => { menu.hidden = true; });
+  host.querySelector('#profileBtn').addEventListener('click', () => { menu.hidden = true; openProfile(); });
   const adminBtn = host.querySelector('#adminBtn');
   if (adminBtn) adminBtn.addEventListener('click', () => { menu.hidden = true; openAdmin(); });
   host.querySelector('#logoutBtn').addEventListener('click', () => {
     if (window.palestraLogout) window.palestraLogout();
   });
+}
+
+/* ---------------- anagrafica utente ---------------- */
+function openProfile() {
+  const user = window.PALESTRA_USER || {};
+  const m = document.createElement('div');
+  m.className = 'admin-screen';
+  m.innerHTML = `
+    <div class="admin-bar">
+      <div class="admin-bar-left">
+        <button class="icon-btn" id="profBack" aria-label="Chiudi">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div>
+          <h2>Il mio profilo</h2>
+          <div class="sub">@${esc(user.username || '')}</div>
+        </div>
+      </div>
+      <button class="btn-primary prof-save" id="profSave"><span class="lbl">Salva</span><span class="spin-dot" hidden></span></button>
+    </div>
+    <div class="admin-scroll">
+      <div class="prof-wrap">
+        <div id="profBody"><div class="admin-empty">Caricamento…</div></div>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  document.body.classList.add('sheet-open');
+  const close = () => { m.remove(); document.body.classList.remove('sheet-open'); };
+  m.querySelector('#profBack').addEventListener('click', close);
+
+  const bodyEl = m.querySelector('#profBody');
+  const saveBtn = m.querySelector('#profSave');
+
+  function field(id, label, value, opts) {
+    opts = opts || {};
+    const ph = opts.ph ? ` placeholder="${esc(opts.ph)}"` : '';
+    const im = opts.inputmode ? ` inputmode="${opts.inputmode}"` : '';
+    const ty = opts.type || 'text';
+    const ro = opts.readonly ? ' disabled' : '';
+    return `<label class="field-sm"><span>${esc(label)}</span><input id="${id}" type="${ty}" value="${esc(value || '')}"${ph}${im}${ro} autocomplete="off" /></label>`;
+  }
+
+  async function load() {
+    let p = {};
+    try {
+      const { data } = await window.sb.from('profiles').select('nome,cognome,email,username,anagrafica').eq('id', user.id).maybeSingle();
+      p = data || {};
+    } catch (_) {}
+    const a = p.anagrafica || {};
+    bodyEl.innerHTML = `
+      <div class="prof-section">
+        <h3>Dati personali</h3>
+        <div class="prof-grid">
+          ${field('pfNome', 'Nome', p.nome)}
+          ${field('pfCognome', 'Cognome', p.cognome)}
+          ${field('pfNascita', 'Data di nascita', a.data_nascita, { type: 'date' })}
+          <label class="field-sm"><span>Sesso</span><select id="pfSesso">
+            <option value=""${!a.sesso ? ' selected' : ''}>—</option>
+            <option value="M"${a.sesso === 'M' ? ' selected' : ''}>Maschio</option>
+            <option value="F"${a.sesso === 'F' ? ' selected' : ''}>Femmina</option>
+            <option value="Altro"${a.sesso === 'Altro' ? ' selected' : ''}>Altro</option>
+          </select></label>
+          ${field('pfCf', 'Codice fiscale', a.codice_fiscale, { ph: 'RSSMRA…' })}
+        </div>
+      </div>
+      <div class="prof-section">
+        <h3>Contatti</h3>
+        <div class="prof-grid">
+          ${field('pfEmail', 'Email', p.email, { readonly: true })}
+          ${field('pfTel', 'Telefono', a.telefono, { type: 'tel', inputmode: 'tel', ph: '+39 …' })}
+        </div>
+      </div>
+      <div class="prof-section">
+        <h3>Indirizzo</h3>
+        <div class="prof-grid">
+          ${field('pfVia', 'Indirizzo', a.indirizzo, { ph: 'Via e civico' })}
+          ${field('pfCitta', 'Città', a.citta)}
+          ${field('pfCap', 'CAP', a.cap, { inputmode: 'numeric' })}
+          ${field('pfProv', 'Provincia', a.provincia, { ph: 'es. MI' })}
+        </div>
+      </div>
+      <div class="prof-section">
+        <h3>Misure</h3>
+        <div class="prof-grid">
+          ${field('pfAltezza', 'Altezza (cm)', a.altezza, { inputmode: 'numeric' })}
+          ${field('pfPeso', 'Peso (kg)', a.peso, { inputmode: 'decimal' })}
+        </div>
+      </div>
+      <div class="prof-section">
+        <h3>Note</h3>
+        <label class="field-sm"><span>Note / obiettivi</span><textarea id="pfNote" rows="3" placeholder="Infortuni, obiettivi, preferenze…">${esc(a.note || '')}</textarea></label>
+      </div>`;
+  }
+
+  saveBtn.addEventListener('click', async () => {
+    const g = (id) => { const el = m.querySelector('#' + id); return el ? el.value.trim() : ''; };
+    const nome = g('pfNome'), cognome = g('pfCognome');
+    if (!nome || !cognome) { toast('Nome e cognome sono obbligatori'); return; }
+    const anagrafica = {
+      data_nascita: g('pfNascita'), sesso: g('pfSesso'), codice_fiscale: g('pfCf'),
+      telefono: g('pfTel'), indirizzo: g('pfVia'), citta: g('pfCitta'), cap: g('pfCap'),
+      provincia: g('pfProv'), altezza: g('pfAltezza'), peso: g('pfPeso'), note: g('pfNote'),
+    };
+    const spin = saveBtn.querySelector('.spin-dot'), lbl = saveBtn.querySelector('.lbl');
+    saveBtn.disabled = true; spin.hidden = false; lbl.style.opacity = '.5';
+    try {
+      const { error } = await window.sb.from('profiles').update({ nome, cognome, anagrafica }).eq('id', user.id);
+      if (error) throw error;
+      window.PALESTRA_USER.nome = nome;
+      onUser(window.PALESTRA_USER);
+      toast('Profilo salvato ✓');
+      close();
+    } catch (err) {
+      saveBtn.disabled = false; spin.hidden = true; lbl.style.opacity = '1';
+      toast('Salvataggio non riuscito');
+    }
+  });
+
+  load();
 }
 
 /* ---------------- dashboard proprietario ---------------- */
@@ -478,7 +599,8 @@ const STATUS_META = {
 
 function adminUserRow(u) {
   const sm = STATUS_META[u.status] || STATUS_META.pending;
-  const initial = (u.nome || u.username || '?').trim().charAt(0).toUpperCase();
+  const fullName = [u.nome, u.cognome].filter(Boolean).join(' ');
+  const initial = (fullName || u.username || '?').trim().charAt(0).toUpperCase();
   const created = u.created_at ? fmtDate(String(u.created_at).slice(0, 10)) : '—';
   const last = u.last_sign_in_at ? fmtTs(u.last_sign_in_at) : 'mai';
   const mail = u.email_confirmed
@@ -497,7 +619,7 @@ function adminUserRow(u) {
     <div class="at-user" data-label="">
       <div class="u-avatar">${esc(initial)}</div>
       <div class="at-uwrap">
-        <div class="at-uname">${esc(u.nome || ('@' + u.username))}</div>
+        <div class="at-uname">${esc(fullName || ('@' + u.username))}</div>
         <div class="at-uhandle">@${esc(u.username)}</div>
       </div>
     </div>

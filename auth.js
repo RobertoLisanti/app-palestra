@@ -39,8 +39,12 @@
           <input id="authEmail" type="email" inputmode="email" autocomplete="email" placeholder="tu@email.it" />
         </label>
         <label class="field" id="nameField" hidden>
-          <span>Nome <i class="opt">(facoltativo)</i></span>
-          <input id="authName" type="text" autocomplete="name" placeholder="Come ti chiami" />
+          <span>Nome</span>
+          <input id="authName" type="text" autocomplete="given-name" placeholder="Il tuo nome" />
+        </label>
+        <label class="field" id="surnameField" hidden>
+          <span>Cognome</span>
+          <input id="authSurname" type="text" autocomplete="family-name" placeholder="Il tuo cognome" />
         </label>
         <label class="field">
           <span>Username</span>
@@ -66,8 +70,8 @@
   const $ = (s) => overlay.querySelector(s);
   const tabs = overlay.querySelectorAll('.auth-tab');
   const form = $('#authForm');
-  const emailField = $('#emailField'), nameField = $('#nameField');
-  const emailEl = $('#authEmail'), nameEl = $('#authName'), userEl = $('#authUser'), passEl = $('#authPass');
+  const emailField = $('#emailField'), nameField = $('#nameField'), surnameField = $('#surnameField');
+  const emailEl = $('#authEmail'), nameEl = $('#authName'), surnameEl = $('#authSurname'), userEl = $('#authUser'), passEl = $('#authPass');
   const msgEl = $('#authMsg'), submitBtn = $('#authSubmit');
   const submitLbl = submitBtn.querySelector('.lbl'), submitSpin = submitBtn.querySelector('.spin-dot');
   const hintEl = $('#authHint');
@@ -79,6 +83,7 @@
     tabs.forEach((t) => t.classList.toggle('is-active', t.dataset.mode === m));
     emailField.hidden = m !== 'signup';
     nameField.hidden = m !== 'signup';
+    surnameField.hidden = m !== 'signup';
     emailEl.required = m === 'signup';
     passEl.setAttribute('autocomplete', m === 'signup' ? 'new-password' : 'current-password');
     submitLbl.textContent = m === 'signup' ? 'Crea account' : 'Accedi';
@@ -136,7 +141,10 @@
     try {
       if (mode === 'signup') {
         const email = emailEl.value.trim();
+        const nome = nameEl.value.trim();
+        const cognome = surnameEl.value.trim();
         if (!/^[a-z0-9_.-]{3,20}$/.test(username)) { msg('Username: 3-20 caratteri tra lettere, numeri, . _ -'); setBusy(false); return; }
+        if (!nome || !cognome) { msg('Inserisci nome e cognome.'); setBusy(false); return; }
         if (!email) { msg('Inserisci la tua email.'); setBusy(false); return; }
         if (password.length < 6) { msg('La password deve avere almeno 6 caratteri.'); setBusy(false); return; }
 
@@ -146,7 +154,7 @@
 
         const { data, error } = await client.auth.signUp({
           email, password,
-          options: { emailRedirectTo: cfg.APP_URL, data: { username, nome: nameEl.value.trim() || null } },
+          options: { emailRedirectTo: cfg.APP_URL, data: { username, nome, cognome } },
         });
         if (error) throw error;
         if (data.session) { onAuthed(data.session); }
