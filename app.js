@@ -646,6 +646,25 @@ function adminDetailRows(pairs) {
   return pairs.map(([k, v]) => `<div class="dl-row"><span class="dl-k">${esc(k)}</span><span class="dl-v">${esc(v || '—')}</span></div>`).join('');
 }
 
+function schedaReadonly(s) {
+  const giorni = s.giorni || [];
+  const nEser = giorni.reduce((acc, g) => acc + (g.esercizi || []).length, 0);
+  let html = `<div class="usch">
+    <div class="usch-hd">
+      <div class="usch-badge">${esc(s.fase)}.${esc(s.num)}</div>
+      <div class="usch-hd-txt">
+        <div class="usch-title">${esc(s.titolo)}${s.is_current ? ' <span class="usch-cur">attuale</span>' : ''}</div>
+        <div class="muted usch-meta">${esc(fmtDate(s.data))} · ${giorni.length} giorni · ${nEser} esercizi</div>
+      </div>
+    </div>`;
+  giorni.forEach((g, gi) => {
+    html += `<div class="usch-day"><h5>${esc(g.nome || ('Giorno ' + (gi + 1)))}</h5>`;
+    html += (g.esercizi || []).map((e, i) => exerciseCard(e, i, -1)).join('');
+    html += `</div>`;
+  });
+  return html + `</div>`;
+}
+
 function openUserDetail(u) {
   const a = u.anagrafica || {};
   const sm = STATUS_META[u.status] || STATUS_META.pending;
@@ -654,55 +673,78 @@ function openUserDetail(u) {
   const created = u.created_at ? fmtDate(String(u.created_at).slice(0, 10)) : '—';
   const last = u.last_sign_in_at ? fmtTs(u.last_sign_in_at) : 'mai';
   const sesso = a.sesso === 'M' ? 'Maschio' : a.sesso === 'F' ? 'Femmina' : (a.sesso || '');
+
   const m = document.createElement('div');
-  m.className = 'sheet-backdrop';
+  m.className = 'admin-screen';
   m.innerHTML = `
-    <div class="sheet detail-sheet" role="dialog" aria-modal="true">
-      <div class="sheet-grab"></div>
-      <div class="detail-hd">
-        <div class="u-avatar">${esc(initial)}</div>
-        <div class="detail-hd-txt">
-          <div class="detail-name">${esc(fullName)} <span class="u-status ${sm.cls}">${sm.lbl}</span></div>
-          <div class="muted">@${esc(u.username)}${u.role === 'owner' ? ' · proprietario' : ''}</div>
+    <div class="admin-bar">
+      <div class="admin-bar-left">
+        <button class="icon-btn" id="udBack" aria-label="Indietro">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div>
+          <h2>Profilo utente</h2>
+          <div class="sub">@${esc(u.username)} · sola lettura</div>
         </div>
       </div>
-      <div class="detail-scroll">
-        <div class="detail-sec"><h4>Account</h4>${adminDetailRows([
+    </div>
+    <div class="admin-scroll">
+      <div class="udetail-wrap">
+        <div class="ud-id">
+          <div class="u-avatar">${esc(initial)}</div>
+          <div>
+            <div class="nm">${esc(fullName)} <span class="u-status ${sm.cls}">${sm.lbl}</span></div>
+            <div class="muted">@${esc(u.username)}${u.role === 'owner' ? ' · proprietario' : ''}</div>
+          </div>
+        </div>
+
+        <div class="ud-card"><h4>Account</h4>${adminDetailRows([
           ['Email', u.email],
           ['Email confermata', u.email_confirmed ? 'Sì' : 'No'],
           ['Stato', sm.lbl],
-          ['Schede', String(u.schede)],
           ['Iscritto il', created],
           ['Ultimo accesso', last],
         ])}</div>
-        <div class="detail-sec"><h4>Dati personali</h4>${adminDetailRows([
+        <div class="ud-card"><h4>Dati personali</h4>${adminDetailRows([
           ['Nome', u.nome],
           ['Cognome', u.cognome],
           ['Data di nascita', a.data_nascita],
           ['Sesso', sesso],
           ['Codice fiscale', a.codice_fiscale],
         ])}</div>
-        <div class="detail-sec"><h4>Contatti</h4>${adminDetailRows([
-          ['Telefono', a.telefono],
-        ])}</div>
-        <div class="detail-sec"><h4>Indirizzo</h4>${adminDetailRows([
+        <div class="ud-card"><h4>Contatti</h4>${adminDetailRows([['Telefono', a.telefono]])}</div>
+        <div class="ud-card"><h4>Indirizzo</h4>${adminDetailRows([
           ['Indirizzo', a.indirizzo],
           ['Città', a.citta],
           ['CAP', a.cap],
           ['Provincia', a.provincia],
         ])}</div>
-        <div class="detail-sec"><h4>Misure</h4>${adminDetailRows([
+        <div class="ud-card"><h4>Misure</h4>${adminDetailRows([
           ['Altezza', a.altezza ? a.altezza + ' cm' : ''],
           ['Peso', a.peso ? a.peso + ' kg' : ''],
         ])}</div>
-        <div class="detail-sec"><h4>Note</h4><div class="detail-note">${esc(a.note || '—')}</div></div>
+        <div class="ud-card"><h4>Note</h4><div class="detail-note">${esc(a.note || '—')}</div></div>
+
+        <div class="ud-sub">Schede</div>
+        <div id="udSchede"><div class="ud-empty">Caricamento schede…</div></div>
       </div>
-      <div class="sheet-actions"><button class="btn-ghost" id="detClose">Chiudi</button></div>
     </div>`;
   document.body.appendChild(m);
-  const close = () => m.remove();
-  m.addEventListener('click', (e) => { if (e.target === m) close(); });
-  m.querySelector('#detClose').addEventListener('click', close);
+  m.querySelector('#udBack').addEventListener('click', () => m.remove());
+
+  const schedeEl = m.querySelector('#udSchede');
+  (async () => {
+    try {
+      const { schede } = await adminCall('schede', { id: u.id });
+      const list = (schede || []).slice().sort((x, y) =>
+        (y.is_current - x.is_current) || (y.fase - x.fase) || (y.num - x.num));
+      schedeEl.innerHTML = list.length
+        ? list.map(schedaReadonly).join('')
+        : '<div class="ud-empty">Nessuna scheda per questo utente.</div>';
+    } catch (err) {
+      schedeEl.innerHTML = `<div class="admin-err">${esc(err.message || 'Errore nel caricamento delle schede')}</div>`;
+    }
+  })();
 }
 
 function openAdmin() {

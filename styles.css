@@ -498,6 +498,39 @@ main#view {
 .admin-empty { text-align: center; color: var(--muted); padding: 50px 20px; font-size: 14px; }
 .admin-err { color: var(--danger); font-weight: 600; padding: 30px 20px; text-align: center; }
 
+/* profilo utente completo (sola lettura, full-screen) */
+.udetail-wrap { max-width: 860px; margin: 0 auto; padding: 18px 18px calc(34px + var(--safe-bottom)); }
+.ud-id { display: flex; align-items: center; gap: 13px; margin-bottom: 16px; }
+.ud-id .u-avatar { width: 48px; height: 48px; border-radius: 13px; font-size: 19px; }
+.ud-id .nm { font-size: 20px; font-weight: 850; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.ud-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 12px;
+}
+.ud-card > h4 {
+  margin: 0 0 10px; font-size: 11px; font-weight: 800; letter-spacing: .5px;
+  text-transform: uppercase; color: var(--accent);
+}
+.ud-sub {
+  font-size: 13px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase;
+  color: var(--muted); margin: 22px 2px 12px;
+}
+.ud-empty { color: var(--muted); padding: 14px 2px; font-size: 14px; }
+.usch { margin-bottom: 16px; }
+.usch-hd { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.usch-badge {
+  flex: none; width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center;
+  font-weight: 850; font-size: 15px; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.usch-title { font-size: 16px; font-weight: 800; }
+.usch-cur {
+  font-size: 10px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; vertical-align: middle;
+  color: var(--accent-ink); background: var(--accent); padding: 2px 7px; border-radius: 999px;
+}
+.usch-meta { font-size: 12.5px; margin-top: 2px; }
+.usch-day h5 { margin: 16px 2px 8px; font-size: 13px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: var(--muted); }
+
 /* anagrafica utente */
 .btn-primary.prof-save { flex: none; padding: 10px 20px; font-size: 14.5px; }
 .prof-wrap { max-width: 720px; margin: 0 auto; padding: 18px 18px calc(34px + var(--safe-bottom)); }
