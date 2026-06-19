@@ -432,13 +432,15 @@ function onUser(user) {
   if (!host) return;
   if (!user) { host.innerHTML = ''; return; }
   const initial = (user.username || user.nome || user.email || '?').trim().charAt(0).toUpperCase();
+  const isOwner = user.role === 'owner';
   host.innerHTML = `
     <button id="accountBtn" class="icon-btn account-btn" aria-label="Account">${esc(initial)}</button>
     <div id="accountMenu" class="account-menu" hidden>
       <div class="account-info">
-        <div class="account-name">${esc(user.nome || ('@' + (user.username || 'account')))}</div>
+        <div class="account-name">${esc(user.nome || ('@' + (user.username || 'account')))}${isOwner ? '<span class="owner-tag">proprietario</span>' : ''}</div>
         <div class="account-email muted">${esc(user.username ? '@' + user.username : '')}${user.email ? ' · ' + esc(user.email) : ''}</div>
       </div>
+      ${isOwner ? '<button id="adminBtn" class="account-action">Gestione utenti</button>' : ''}
       <button id="logoutBtn" class="account-logout">Esci</button>
     </div>`;
   const btn = host.querySelector('#accountBtn');
@@ -446,9 +448,131 @@ function onUser(user) {
   btn.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
   menu.addEventListener('click', (e) => e.stopPropagation());
   document.addEventListener('click', () => { menu.hidden = true; });
+  const adminBtn = host.querySelector('#adminBtn');
+  if (adminBtn) adminBtn.addEventListener('click', () => { menu.hidden = true; openAdmin(); });
   host.querySelector('#logoutBtn').addEventListener('click', () => {
     if (window.palestraLogout) window.palestraLogout();
   });
+}
+
+/* ---------------- dashboard proprietario ---------------- */
+async function adminCall(action, payload) {
+  const { data: { session } } = await window.sb.auth.getSession();
+  const token = session && session.access_token;
+  const cfg = window.PALESTRA_CONFIG;
+  const res = await fetch(cfg.SUPABASE_URL + '/functions/v1/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: cfg.SUPABASE_KEY, Authorization: 'Bearer ' + token },
+    body: JSON.stringify(Object.assign({ action }, payload || {})),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || 'Errore');
+  return body;
+}
+
+const STATUS_META = {
+  pending: { lbl: 'In attesa', cls: 'st-pending' },
+  approved: { lbl: 'Attivo', cls: 'st-approved' },
+  blocked: { lbl: 'Bloccato', cls: 'st-blocked' },
+};
+
+function adminUserCard(u) {
+  const sm = STATUS_META[u.status] || STATUS_META.pending;
+  const initial = (u.nome || u.username || '?').trim().charAt(0).toUpperCase();
+  const created = u.created_at ? fmtDate(String(u.created_at).slice(0, 10)) : '';
+  const last = u.last_sign_in_at ? fmtTs(u.last_sign_in_at) : 'mai';
+  const mailBadge = u.email_confirmed
+    ? '<span class="u-chip ok">email ✓</span>'
+    : '<span class="u-chip warn">email da confermare</span>';
+  let actions = '';
+  if (u.is_self) {
+    actions = '<span class="u-self">Sei tu</span>';
+  } else {
+    const del = `<button class="u-btn danger" data-act="delete" data-id="${esc(u.id)}">Elimina</button>`;
+    if (u.status === 'pending') {
+      actions = `<button class="u-btn primary" data-act="approve" data-id="${esc(u.id)}">Approva</button>${del}`;
+    } else if (u.status === 'approved') {
+      actions = `<button class="u-btn" data-act="block" data-id="${esc(u.id)}">Blocca</button>${del}`;
+    } else {
+      actions = `<button class="u-btn primary" data-act="approve" data-id="${esc(u.id)}">Sblocca</button>${del}`;
+    }
+  }
+  return `<div class="admin-user">
+    <div class="u-top">
+      <div class="u-avatar">${esc(initial)}</div>
+      <div class="u-id">
+        <div class="u-name">${esc(u.nome || ('@' + u.username))} <span class="u-status ${sm.cls}">${sm.lbl}</span></div>
+        <div class="u-sub muted">@${esc(u.username)} · ${esc(u.email || '')}</div>
+      </div>
+    </div>
+    <div class="u-meta">
+      ${mailBadge}
+      <span class="u-chip">${u.schede} schede</span>
+      <span class="u-chip">iscritto ${esc(created)}</span>
+      <span class="u-chip">accesso: ${esc(last)}</span>
+    </div>
+    <div class="u-actions">${actions}</div>
+  </div>`;
+}
+
+function openAdmin() {
+  const m = document.createElement('div');
+  m.className = 'admin-backdrop';
+  m.innerHTML = `
+    <div class="admin-panel" role="dialog" aria-modal="true">
+      <div class="admin-head">
+        <h3>Gestione utenti</h3>
+        <button class="admin-close" id="adminClose" aria-label="Chiudi">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="admin-body" id="adminBody">
+        <div class="skeleton"></div><div class="skeleton"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  document.body.classList.add('sheet-open');
+  const close = () => { m.remove(); document.body.classList.remove('sheet-open'); };
+  m.addEventListener('click', (e) => { if (e.target === m) close(); });
+  m.querySelector('#adminClose').addEventListener('click', close);
+
+  const bodyEl = m.querySelector('#adminBody');
+
+  async function refresh() {
+    try {
+      const { users } = await adminCall('list');
+      const pend = users.filter((u) => u.status === 'pending').length;
+      const appr = users.filter((u) => u.status === 'approved').length;
+      const blk = users.filter((u) => u.status === 'blocked').length;
+      bodyEl.innerHTML = `
+        <div class="admin-summary">
+          <span class="sum st-pending"><b>${pend}</b> in attesa</span>
+          <span class="sum st-approved"><b>${appr}</b> attivi</span>
+          <span class="sum st-blocked"><b>${blk}</b> bloccati</span>
+        </div>
+        <div class="admin-list">${users.map(adminUserCard).join('')}</div>`;
+    } catch (err) {
+      bodyEl.innerHTML = `<div class="admin-err">${esc(err.message || 'Errore di caricamento')}</div>`;
+    }
+  }
+
+  bodyEl.addEventListener('click', async (e) => {
+    const b = e.target.closest('.u-btn');
+    if (!b) return;
+    const act = b.dataset.act, id = b.dataset.id;
+    if (act === 'delete' && !confirm('Eliminare definitivamente questo utente e tutte le sue schede? L’operazione non è reversibile.')) return;
+    b.disabled = true;
+    try {
+      if (act === 'delete') { await adminCall('delete', { id }); toast('Utente eliminato'); }
+      else { await adminCall('set_status', { id, status: act === 'block' ? 'blocked' : 'approved' }); toast('Aggiornato ✓'); }
+      await refresh();
+    } catch (err) {
+      b.disabled = false;
+      toast(err.message || 'Operazione non riuscita');
+    }
+  });
+
+  refresh();
 }
 
 /* ---------------- boot ---------------- */

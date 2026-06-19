@@ -93,6 +93,8 @@
 
   function human(err) {
     const m = (err && err.message ? err.message : String(err)).toLowerCase();
+    if (m.includes('approvazione') || m.includes('attesa di appro')) return 'Il tuo account è in attesa di approvazione dal proprietario.';
+    if (m.includes('bloccato')) return 'Il tuo account è stato bloccato. Contatta il proprietario.';
     if (m.includes('non corretti') || m.includes('invalid login')) return 'Username o password non corretti.';
     if (m.includes('not confirmed') || m.includes('conferma')) return 'Devi prima confermare la tua email (controlla la posta).';
     if (m.includes('already') || m.includes('registered') || m.includes('duplicate')) return 'Esiste già un account con questa email.';
@@ -151,7 +153,7 @@
         else {
           setMode('login');
           userEl.value = username;
-          msg('Ti ho inviato una mail di conferma a ' + email + '. Confermala, poi accedi qui.', 'ok');
+          msg('Ti ho inviato una mail di conferma a ' + email + '. Confermala; potrai accedere dopo l’approvazione del proprietario.', 'ok');
         }
       } else {
         const session = await loginUsername(username, password);
@@ -172,14 +174,40 @@
   function showOverlay() { overlay.classList.remove('hide'); appEl.classList.add('locked'); document.body.classList.add('auth-open'); }
   function hideOverlay() { overlay.classList.add('hide'); appEl.classList.remove('locked'); document.body.classList.remove('auth-open'); }
 
-  function onAuthed(session) {
-    if (!session) return;
-    hideOverlay();
+  let handling = false;
+  async function onAuthed(session) {
+    if (!session || started || handling) return;
+    handling = true;
     const u = session.user || {};
+    // verifica lo stato dell'account (approvazione del proprietario)
+    let prof = null;
+    try {
+      const { data } = await client.from('profiles').select('username, nome, role, status').eq('id', u.id).maybeSingle();
+      prof = data;
+    } catch (_) {}
+    if (prof && prof.status !== 'approved') {
+      try { await client.auth.signOut(); } catch (_) {}
+      showOverlay();
+      setMode('login');
+      msg(prof.status === 'blocked'
+        ? 'Il tuo account è stato bloccato. Contatta il proprietario.'
+        : 'Il tuo account è in attesa di approvazione dal proprietario.');
+      setBusy(false);
+      handling = false;
+      return;
+    }
+    hideOverlay();
     const meta = u.user_metadata || {};
-    window.PALESTRA_USER = { email: u.email || '', username: meta.username || '', nome: meta.nome || null };
+    window.PALESTRA_USER = {
+      id: u.id,
+      email: u.email || '',
+      username: (prof && prof.username) || meta.username || '',
+      nome: (prof && prof.nome) || meta.nome || null,
+      role: (prof && prof.role) || 'user',
+    };
     if (window.PalestraApp && typeof window.PalestraApp.onUser === 'function') window.PalestraApp.onUser(window.PALESTRA_USER);
     if (!started) { started = true; window.PalestraApp && window.PalestraApp.start(); }
+    handling = false;
   }
 
   window.palestraLogout = async function () {
