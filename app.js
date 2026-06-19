@@ -716,6 +716,7 @@ function openAdmin() {
     <div class="admin-scroll">
       <div class="admin-wrap">
         <div class="admin-kpis" id="adminKpis"></div>
+        <div class="admin-stats" id="adminStats"></div>
         <div class="admin-tools">
           <div class="admin-search">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -731,6 +732,7 @@ function openAdmin() {
   let all = [], filter = 'all', query = '';
   const subEl = m.querySelector('#adminSub');
   const kpisEl = m.querySelector('#adminKpis');
+  const statsEl = m.querySelector('#adminStats');
   const resultEl = m.querySelector('#adminResult');
   const searchEl = m.querySelector('#adminSearch');
 
@@ -747,6 +749,28 @@ function openAdmin() {
       <button class="kpi kpi-pending ${filter === 'pending' ? 'on' : ''}" data-f="pending"><span class="kpi-n">${pend}</span><span class="kpi-l">In attesa</span></button>
       <button class="kpi kpi-approved ${filter === 'approved' ? 'on' : ''}" data-f="approved"><span class="kpi-n">${appr}</span><span class="kpi-l">Attivi</span></button>
       <button class="kpi kpi-blocked ${filter === 'blocked' ? 'on' : ''}" data-f="blocked"><span class="kpi-n">${blk}</span><span class="kpi-l">Bloccati</span></button>`;
+  }
+
+  function renderStats() {
+    const now = Date.now(), WEEK = 7 * 86400000;
+    const ms = (d) => { const t = new Date(d).getTime(); return isNaN(t) ? Infinity : now - t; };
+    const newWeek = all.filter((u) => u.created_at && ms(u.created_at) <= WEEK).length;
+    const toConfirm = all.filter((u) => !u.email_confirmed).length;
+    const active7 = all.filter((u) => u.last_sign_in_at && ms(u.last_sign_in_at) <= WEEK).length;
+    const totSchede = all.reduce((s, u) => s + (u.schede || 0), 0);
+    const ICON = {
+      add: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>',
+      mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>',
+      act: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+      list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>',
+    };
+    const card = (ico, n, label, accent) =>
+      `<div class="stat ${accent}"><div class="stat-ico">${ico}</div><div class="stat-txt"><span class="stat-n">${n}</span><span class="stat-l">${label}</span></div></div>`;
+    statsEl.innerHTML =
+      card(ICON.add, newWeek, 'Nuovi (7 gg)', 'cyan') +
+      card(ICON.mail, toConfirm, 'Email da confermare', 'warn') +
+      card(ICON.act, active7, 'Attivi (7 gg)', 'green') +
+      card(ICON.list, totSchede, 'Schede totali', 'viol');
   }
 
   function renderList() {
@@ -782,6 +806,7 @@ function openAdmin() {
       const { users } = await adminCall('list');
       all = users || [];
       renderKpis();
+      renderStats();
       renderList();
     } catch (err) {
       resultEl.innerHTML = `<div class="admin-err">${esc(err.message || 'Errore di caricamento')}</div>`;
