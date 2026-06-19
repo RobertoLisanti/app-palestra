@@ -615,7 +615,7 @@ function adminUserRow(u) {
     else if (u.status === 'approved') actions = `<button class="u-btn" data-act="block" data-id="${esc(u.id)}">Blocca</button>${del}`;
     else actions = `<button class="u-btn primary" data-act="approve" data-id="${esc(u.id)}">Sblocca</button>${del}`;
   }
-  return `<div class="at-row">
+  return `<div class="at-row" data-uid="${esc(u.id)}">
     <div class="at-user" data-label="">
       <div class="u-avatar">${esc(initial)}</div>
       <div class="at-uwrap">
@@ -630,6 +630,69 @@ function adminUserRow(u) {
     <div data-label="Stato"><span class="u-status ${sm.cls}">${sm.lbl}</span></div>
     <div class="at-act" data-label="">${actions}</div>
   </div>`;
+}
+
+function adminDetailRows(pairs) {
+  return pairs.map(([k, v]) => `<div class="dl-row"><span class="dl-k">${esc(k)}</span><span class="dl-v">${esc(v || '—')}</span></div>`).join('');
+}
+
+function openUserDetail(u) {
+  const a = u.anagrafica || {};
+  const sm = STATUS_META[u.status] || STATUS_META.pending;
+  const fullName = [u.nome, u.cognome].filter(Boolean).join(' ') || ('@' + u.username);
+  const initial = fullName.trim().charAt(0).toUpperCase();
+  const created = u.created_at ? fmtDate(String(u.created_at).slice(0, 10)) : '—';
+  const last = u.last_sign_in_at ? fmtTs(u.last_sign_in_at) : 'mai';
+  const sesso = a.sesso === 'M' ? 'Maschio' : a.sesso === 'F' ? 'Femmina' : (a.sesso || '');
+  const m = document.createElement('div');
+  m.className = 'sheet-backdrop';
+  m.innerHTML = `
+    <div class="sheet detail-sheet" role="dialog" aria-modal="true">
+      <div class="sheet-grab"></div>
+      <div class="detail-hd">
+        <div class="u-avatar">${esc(initial)}</div>
+        <div class="detail-hd-txt">
+          <div class="detail-name">${esc(fullName)} <span class="u-status ${sm.cls}">${sm.lbl}</span></div>
+          <div class="muted">@${esc(u.username)}${u.role === 'owner' ? ' · proprietario' : ''}</div>
+        </div>
+      </div>
+      <div class="detail-scroll">
+        <div class="detail-sec"><h4>Account</h4>${adminDetailRows([
+          ['Email', u.email],
+          ['Email confermata', u.email_confirmed ? 'Sì' : 'No'],
+          ['Stato', sm.lbl],
+          ['Schede', String(u.schede)],
+          ['Iscritto il', created],
+          ['Ultimo accesso', last],
+        ])}</div>
+        <div class="detail-sec"><h4>Dati personali</h4>${adminDetailRows([
+          ['Nome', u.nome],
+          ['Cognome', u.cognome],
+          ['Data di nascita', a.data_nascita],
+          ['Sesso', sesso],
+          ['Codice fiscale', a.codice_fiscale],
+        ])}</div>
+        <div class="detail-sec"><h4>Contatti</h4>${adminDetailRows([
+          ['Telefono', a.telefono],
+        ])}</div>
+        <div class="detail-sec"><h4>Indirizzo</h4>${adminDetailRows([
+          ['Indirizzo', a.indirizzo],
+          ['Città', a.citta],
+          ['CAP', a.cap],
+          ['Provincia', a.provincia],
+        ])}</div>
+        <div class="detail-sec"><h4>Misure</h4>${adminDetailRows([
+          ['Altezza', a.altezza ? a.altezza + ' cm' : ''],
+          ['Peso', a.peso ? a.peso + ' kg' : ''],
+        ])}</div>
+        <div class="detail-sec"><h4>Note</h4><div class="detail-note">${esc(a.note || '—')}</div></div>
+      </div>
+      <div class="sheet-actions"><button class="btn-ghost" id="detClose">Chiudi</button></div>
+    </div>`;
+  document.body.appendChild(m);
+  const close = () => m.remove();
+  m.addEventListener('click', (e) => { if (e.target === m) close(); });
+  m.querySelector('#detClose').addEventListener('click', close);
 }
 
 function openAdmin() {
@@ -739,7 +802,11 @@ function openAdmin() {
 
   resultEl.addEventListener('click', async (e) => {
     const b = e.target.closest('.u-btn');
-    if (!b) return;
+    if (!b) {
+      const row = e.target.closest('.at-row');
+      if (row) { const u = all.find((x) => x.id === row.dataset.uid); if (u) openUserDetail(u); }
+      return;
+    }
     const act = b.dataset.act, id = b.dataset.id;
     if (act === 'delete' && !confirm('Eliminare definitivamente questo utente e tutte le sue schede? L’operazione non è reversibile.')) return;
     b.disabled = true;

@@ -433,6 +433,26 @@ main#view {
 .u-btn.danger { color: var(--danger); border-color: rgba(255,93,93,.35); }
 .u-self { font-size: 12px; color: var(--muted-2); font-weight: 700; }
 
+.at-row { cursor: pointer; }
+
+/* scheda dettaglio utente (sola lettura) */
+.detail-sheet { max-width: 520px; max-height: 90vh; display: flex; flex-direction: column; }
+.detail-hd { display: flex; align-items: center; gap: 12px; padding: 2px 0 14px; border-bottom: 1px solid var(--line); }
+.detail-hd .u-avatar { width: 44px; height: 44px; border-radius: 12px; font-size: 17px; }
+.detail-hd-txt { min-width: 0; }
+.detail-name { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.detail-scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 0; }
+.detail-sec { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.detail-sec:last-child { border-bottom: none; }
+.detail-sec h4 {
+  margin: 0 0 10px; font-size: 11px; font-weight: 800; letter-spacing: .5px;
+  text-transform: uppercase; color: var(--accent);
+}
+.dl-row { display: flex; justify-content: space-between; gap: 16px; padding: 5px 0; font-size: 14px; }
+.dl-k { color: var(--muted); flex: none; }
+.dl-v { color: var(--text); font-weight: 650; text-align: right; word-break: break-word; }
+.detail-note { font-size: 14px; color: var(--text); white-space: pre-wrap; line-height: 1.5; }
+
 .admin-empty { text-align: center; color: var(--muted); padding: 50px 20px; font-size: 14px; }
 .admin-err { color: var(--danger); font-weight: 600; padding: 30px 20px; text-align: center; }
 
