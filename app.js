@@ -721,12 +721,6 @@ function openAdmin() {
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
             <input id="adminSearch" type="text" placeholder="Cerca per nome, username o email" autocomplete="off" autocapitalize="none" />
           </div>
-          <div class="admin-filters" id="adminFilters">
-            <button data-f="all" class="on">Tutti</button>
-            <button data-f="pending">In attesa</button>
-            <button data-f="approved">Attivi</button>
-            <button data-f="blocked">Bloccati</button>
-          </div>
         </div>
         <div id="adminResult"><div class="admin-empty">Caricamento…</div></div>
       </div>
@@ -776,12 +770,10 @@ function openAdmin() {
 
   function setFilter(f) {
     filter = f;
-    m.querySelectorAll('#adminFilters button').forEach((b) => b.classList.toggle('on', b.dataset.f === f));
     renderKpis();
     renderList();
   }
 
-  m.querySelector('#adminFilters').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setFilter(b.dataset.f); });
   kpisEl.addEventListener('click', (e) => { const b = e.target.closest('.kpi'); if (b) setFilter(b.dataset.f); });
   searchEl.addEventListener('input', () => { query = searchEl.value.trim(); renderList(); });
 
