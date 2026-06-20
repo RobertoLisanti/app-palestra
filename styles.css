@@ -616,12 +616,21 @@ main#view {
 .ed-hint { font-size: 12.5px; color: var(--muted); text-align: center; line-height: 1.4; margin: 4px 6px 0; }
 .field-sm .opt { color: var(--muted-2); font-weight: 600; }
 
-/* aggiungi settimana (scheda attuale) */
+/* footer scheda: settimane +/- e modifica */
+.sch-footer { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+.week-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .add-week-btn {
-  width: 100%; margin-top: 6px; padding: 13px; cursor: pointer; font-size: 14.5px; font-weight: 800;
+  width: 100%; padding: 13px; cursor: pointer; font-size: 14px; font-weight: 800;
   background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); color: var(--accent);
 }
 .add-week-btn:active { transform: scale(.99); background: var(--surface-2); }
+#removeWeekBtn { color: var(--muted); }
+.sch-edit {
+  width: 100%; padding: 12px; cursor: pointer; font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); color: var(--text);
+}
+.sch-edit:active { transform: scale(.99); background: var(--surface-3); }
 
 /* anagrafica utente */
 .btn-primary.prof-save { flex: none; padding: 10px 20px; font-size: 14.5px; }
