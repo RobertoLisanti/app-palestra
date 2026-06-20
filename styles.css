@@ -30,6 +30,8 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* i <button> non devono usare il colore nero di default: ereditano il testo chiaro */
+button { color: inherit; font-family: inherit; }
 /* l'attributo [hidden] deve sempre vincere su display: block dei componenti */
 [hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; height: 100%; }
@@ -204,6 +206,7 @@ main#view {
 }
 .ex-title { flex: 1; min-width: 0; }
 .ex-title h4 { margin: 0; font-size: 17px; font-weight: 750; letter-spacing: -.2px; line-height: 1.25; }
+.ex-scheme { font-size: 12.5px; font-weight: 800; color: var(--accent-2); margin-top: 3px; }
 .ex-rest {
   flex: none; display: inline-flex; align-items: center; gap: 5px;
   font-size: 12px; font-weight: 700; color: var(--accent-2);
@@ -594,13 +597,16 @@ main#view {
 .ed-day-acts { display: flex; gap: 5px; flex: none; }
 .ed-ex-list { display: flex; flex-direction: column; gap: 8px; }
 .ed-ex {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px;
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px;
 }
-.ed-ex-main { flex: 1; min-width: 0; display: flex; gap: 8px; }
+.ed-ex-row1 { display: flex; align-items: center; gap: 8px; }
+.ed-ex-row2 { display: flex; align-items: center; gap: 8px; }
+.ed-x { color: var(--muted-2); font-weight: 800; flex: none; }
 .ed-ex-name { flex: 1; min-width: 0; padding: 9px 11px; font-size: 14.5px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; outline: none; }
-.ed-ex-rec { width: 70px; flex: none; padding: 9px 8px; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; outline: none; text-align: center; }
-.ed-ex-name:focus, .ed-ex-rec:focus { border-color: var(--accent); }
+.ed-ex-sm { flex: 1; min-width: 0; padding: 9px 8px; font-size: 13.5px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; outline: none; text-align: center; }
+.ed-ex-note { width: 100%; padding: 9px 11px; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; outline: none; }
+.ed-ex-name:focus, .ed-ex-sm:focus, .ed-ex-note:focus { border-color: var(--accent); }
 .ed-ex-acts { display: flex; gap: 4px; flex: none; align-items: center; }
 .ed-ex-acts .u-ic, .ed-day-acts .u-ic { width: 30px; height: 30px; border-radius: 8px; }
 .ed-ex-acts .u-ic svg, .ed-day-acts .u-ic svg { width: 15px; height: 15px; }

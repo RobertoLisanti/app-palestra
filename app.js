@@ -238,10 +238,16 @@ function exerciseCard(e, index, curWeek, ctx) {
     </div>`;
   }).join('')}</div>` : '';
 
+  let scheme = '';
+  if (e.serie && e.reps) scheme = `${esc(e.serie)} × ${esc(e.reps)}`;
+  else if (e.serie) scheme = `${esc(e.serie)} serie`;
+  else if (e.reps) scheme = `${esc(e.reps)} reps`;
+  const schemeHtml = scheme ? `<div class="ex-scheme">${scheme}</div>` : '';
+
   return `<article class="card">
     <div class="card-top">
       <div class="ex-index">${index + 1}</div>
-      <div class="ex-title"><h4>${esc(e.nome)}</h4></div>
+      <div class="ex-title"><h4>${esc(e.nome)}</h4>${schemeHtml}</div>
       ${rest}
     </div>
     ${notesHtml}
@@ -861,17 +867,24 @@ function buildSchedaEditor(editId) {
     const moveSel = dayTotal > 1
       ? `<select class="ex-move" data-act="ex-move" data-day="${di}" data-ex="${xi}"><option value="">Sposta a…</option>${ed.giorni.map((g, j) => j === di ? '' : `<option value="${j}">${esc(g.nome || ('Giorno ' + (j + 1)))}</option>`).join('')}</select>`
       : '';
+    const noteVal = Array.isArray(e.note) ? e.note.filter(Boolean).join(' ') : (e.note || '');
     return `<div class="ed-ex">
-      <div class="ed-ex-main">
+      <div class="ed-ex-row1">
         <input class="ed-ex-name" data-field="ex-nome" data-day="${di}" data-ex="${xi}" value="${esc(e.nome || '')}" placeholder="Nome esercizio" autocomplete="off" />
-        <input class="ed-ex-rec" data-field="ex-rec" data-day="${di}" data-ex="${xi}" value="${esc(e.recupero || '')}" placeholder="rec." autocomplete="off" />
+        <div class="ed-ex-acts">
+          <button class="u-ic" data-act="ex-up" data-day="${di}" data-ex="${xi}" title="Sposta su" ${xi === 0 ? 'disabled' : ''}>${ED_ICONS.up}</button>
+          <button class="u-ic" data-act="ex-down" data-day="${di}" data-ex="${xi}" title="Sposta giù" ${xi === exTotal - 1 ? 'disabled' : ''}>${ED_ICONS.down}</button>
+          ${moveSel}
+          <button class="u-ic danger" data-act="ex-del" data-day="${di}" data-ex="${xi}" title="Elimina esercizio">${ED_ICONS.trash}</button>
+        </div>
       </div>
-      <div class="ed-ex-acts">
-        <button class="u-ic" data-act="ex-up" data-day="${di}" data-ex="${xi}" title="Sposta su" ${xi === 0 ? 'disabled' : ''}>${ED_ICONS.up}</button>
-        <button class="u-ic" data-act="ex-down" data-day="${di}" data-ex="${xi}" title="Sposta giù" ${xi === exTotal - 1 ? 'disabled' : ''}>${ED_ICONS.down}</button>
-        ${moveSel}
-        <button class="u-ic danger" data-act="ex-del" data-day="${di}" data-ex="${xi}" title="Elimina esercizio">${ED_ICONS.trash}</button>
+      <div class="ed-ex-row2">
+        <input class="ed-ex-sm" data-field="ex-serie" data-day="${di}" data-ex="${xi}" value="${esc(e.serie || '')}" placeholder="serie" autocomplete="off" />
+        <span class="ed-x">×</span>
+        <input class="ed-ex-sm" data-field="ex-reps" data-day="${di}" data-ex="${xi}" value="${esc(e.reps || '')}" placeholder="reps" autocomplete="off" />
+        <input class="ed-ex-sm" data-field="ex-rec" data-day="${di}" data-ex="${xi}" value="${esc(e.recupero || '')}" placeholder="rec." autocomplete="off" />
       </div>
+      <input class="ed-ex-note" data-field="ex-note" data-day="${di}" data-ex="${xi}" value="${esc(noteVal)}" placeholder="Nota a cui fare attenzione (facoltativa)" autocomplete="off" />
     </div>`;
   }
 
@@ -901,9 +914,13 @@ function buildSchedaEditor(editId) {
     const inp = e.target, f = inp.dataset.field;
     if (!f) return;
     const di = +inp.dataset.day;
-    if (f === 'day-nome') ed.giorni[di].nome = inp.value;
-    else if (f === 'ex-nome') ed.giorni[di].esercizi[+inp.dataset.ex].nome = inp.value;
-    else if (f === 'ex-rec') ed.giorni[di].esercizi[+inp.dataset.ex].recupero = inp.value;
+    if (f === 'day-nome') { ed.giorni[di].nome = inp.value; return; }
+    const ex = ed.giorni[di].esercizi[+inp.dataset.ex];
+    if (f === 'ex-nome') ex.nome = inp.value;
+    else if (f === 'ex-rec') ex.recupero = inp.value;
+    else if (f === 'ex-serie') ex.serie = inp.value;
+    else if (f === 'ex-reps') ex.reps = inp.value;
+    else if (f === 'ex-note') ex.note = inp.value;
   });
   edGiorni.addEventListener('change', (e) => {
     const sel = e.target;
@@ -948,7 +965,10 @@ function buildSchedaEditor(editId) {
     if (!confirm('Caricare la struttura di questa scheda? Sostituirà i giorni attuali dell’editor (gli obiettivi e i risultati NON vengono copiati).')) { sourceSel.value = ''; return; }
     ed.giorni = (src.giorni || []).map((g) => ({
       nome: g.nome || '',
-      esercizi: (g.esercizi || []).map((e) => ({ nome: e.nome || '', recupero: e.recupero || '' })),
+      esercizi: (g.esercizi || []).map((e) => ({
+        nome: e.nome || '', serie: e.serie || '', reps: e.reps || '', recupero: e.recupero || '',
+        note: Array.isArray(e.note) ? e.note.filter(Boolean).join(' ') : (e.note || ''),
+      })),
     }));
     if (!ed.giorni.length) ed.giorni = [{ nome: '1° Giorno', esercizi: [{ nome: '', recupero: '' }] }];
     const fw = src.giorni && src.giorni[0] && src.giorni[0].esercizi && src.giorni[0].esercizi[0] && src.giorni[0].esercizi[0].settimane;
@@ -978,11 +998,17 @@ function buildSchedaEditor(editId) {
     };
     const giorni = ed.giorni.map((g, gi) => ({
       nome: (g.nome || '').trim() || ((gi + 1) + '° Giorno'),
-      esercizi: g.esercizi.filter((e) => (e.nome || '').trim()).map((e) => ({
-        nome: e.nome.trim(), recupero: (e.recupero || '').trim(),
-        note: Array.isArray(e.note) ? e.note : [],
-        settimane: exSettimane(e),
-      })),
+      esercizi: g.esercizi.filter((e) => (e.nome || '').trim()).map((e) => {
+        const noteStr = Array.isArray(e.note) ? e.note.filter(Boolean).join(' ') : (e.note || '');
+        return {
+          nome: e.nome.trim(),
+          serie: (e.serie || '').trim(),
+          reps: (e.reps || '').trim(),
+          recupero: (e.recupero || '').trim(),
+          note: noteStr.trim() ? [noteStr.trim()] : [],
+          settimane: exSettimane(e),
+        };
+      }),
     })).filter((g) => g.esercizi.length > 0);
     if (!giorni.length) { toast('Aggiungi almeno un esercizio con un nome'); return; }
 
