@@ -609,35 +609,51 @@ refreshBtn.addEventListener('click', async () => {
   toast(ok ? 'Aggiornato ✓' : 'Offline — dati salvati');
 });
 
-/* ---------------- account (utente loggato) ---------------- */
+/* ---------------- account + navigazione (menu in alto a destra) ---------------- */
+function accountMenuMarkup(user) {
+  user = user || {};
+  const isOwner = user.role === 'owner';
+  const initial = (user.username || user.nome || '?').trim().charAt(0).toUpperCase();
+  const navItem = (href, label) => `<button class="account-action" data-go="${href}">${esc(label)}</button>`;
+  return `
+    <button class="icon-btn account-btn" data-acc="toggle" aria-label="Menu">${esc(initial)}</button>
+    <div class="account-menu" data-acc="menu" hidden>
+      <div class="account-info">
+        <div class="account-name">${esc(user.nome || ('@' + (user.username || 'account')))}${isOwner ? '<span class="owner-tag">proprietario</span>' : ''}</div>
+        <div class="account-email muted">${esc(user.username ? '@' + user.username : '')}</div>
+      </div>
+      <div class="account-sec">Naviga</div>
+      ${navItem('#/home', 'Home')}
+      ${navItem('#/attuale', 'Scheda attuale')}
+      ${navItem('#/storico', 'Storico')}
+      ${navItem('#/nuova', 'Crea scheda')}
+      ${navItem('#/profilo', 'Il mio profilo')}
+      ${isOwner ? navItem('#/admin', 'Gestione utenti') : ''}
+      <button class="account-logout" data-acc="logout">Esci</button>
+    </div>`;
+}
+
+function wireAccountMenu(host) {
+  if (!host) return;
+  const btn = host.querySelector('[data-acc="toggle"]');
+  const menu = host.querySelector('[data-acc="menu"]');
+  if (!btn || !menu) return;
+  btn.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+  menu.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const nav = e.target.closest('[data-go]');
+    if (nav) { menu.hidden = true; go(nav.dataset.go); return; }
+    if (e.target.closest('[data-acc="logout"]')) { menu.hidden = true; if (window.palestraLogout) window.palestraLogout(); }
+  });
+  document.addEventListener('click', () => { menu.hidden = true; });
+}
+
 function onUser(user) {
   const host = document.getElementById('accountSlot');
   if (!host) return;
   if (!user) { host.innerHTML = ''; return; }
-  const initial = (user.username || user.nome || user.email || '?').trim().charAt(0).toUpperCase();
-  const isOwner = user.role === 'owner';
-  host.innerHTML = `
-    <button id="accountBtn" class="icon-btn account-btn" aria-label="Account">${esc(initial)}</button>
-    <div id="accountMenu" class="account-menu" hidden>
-      <div class="account-info">
-        <div class="account-name">${esc(user.nome || ('@' + (user.username || 'account')))}${isOwner ? '<span class="owner-tag">proprietario</span>' : ''}</div>
-        <div class="account-email muted">${esc(user.username ? '@' + user.username : '')}${user.email ? ' · ' + esc(user.email) : ''}</div>
-      </div>
-      <button id="profileBtn" class="account-action">Il mio profilo</button>
-      ${isOwner ? '<button id="adminBtn" class="account-action">Gestione utenti</button>' : ''}
-      <button id="logoutBtn" class="account-logout">Esci</button>
-    </div>`;
-  const btn = host.querySelector('#accountBtn');
-  const menu = host.querySelector('#accountMenu');
-  btn.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
-  menu.addEventListener('click', (e) => e.stopPropagation());
-  document.addEventListener('click', () => { menu.hidden = true; });
-  host.querySelector('#profileBtn').addEventListener('click', () => { menu.hidden = true; go('#/profilo'); });
-  const adminBtn = host.querySelector('#adminBtn');
-  if (adminBtn) adminBtn.addEventListener('click', () => { menu.hidden = true; go('#/admin'); });
-  host.querySelector('#logoutBtn').addEventListener('click', () => {
-    if (window.palestraLogout) window.palestraLogout();
-  });
+  host.innerHTML = accountMenuMarkup(user);
+  wireAccountMenu(host);
 }
 
 /* ---------------- anagrafica utente ---------------- */
@@ -656,13 +672,17 @@ function buildProfile() {
           <div class="sub">@${esc(user.username || '')}</div>
         </div>
       </div>
-      <button class="btn-primary prof-save" id="profSave"><span class="lbl">Salva</span><span class="spin-dot" hidden></span></button>
+      <div class="bar-right">
+        <button class="btn-primary prof-save" id="profSave"><span class="lbl">Salva</span><span class="spin-dot" hidden></span></button>
+        <div class="account-slot acc-overlay">${accountMenuMarkup(window.PALESTRA_USER)}</div>
+      </div>
     </div>
     <div class="admin-scroll">
       <div class="prof-wrap">
         <div id="profBody"><div class="admin-empty">Caricamento…</div></div>
       </div>
     </div>`;
+  wireAccountMenu(m.querySelector('.acc-overlay'));
   m.querySelector('#profBack').addEventListener('click', () => go('#/home'));
 
   const bodyEl = m.querySelector('#profBody');
@@ -809,7 +829,10 @@ function buildSchedaEditor(editId) {
         </button>
         <div><h2>${esc(headTitle)}</h2><div class="sub">${esc(headSub)}</div></div>
       </div>
-      <button class="btn-primary prof-save" id="edSave"><span class="lbl">${esc(saveLbl)}</span><span class="spin-dot" hidden></span></button>
+      <div class="bar-right">
+        <button class="btn-primary prof-save" id="edSave"><span class="lbl">${esc(saveLbl)}</span><span class="spin-dot" hidden></span></button>
+        <div class="account-slot acc-overlay">${accountMenuMarkup(window.PALESTRA_USER)}</div>
+      </div>
     </div>
     <div class="admin-scroll">
       <div class="ed-wrap">
@@ -828,6 +851,7 @@ function buildSchedaEditor(editId) {
         ${hintHtml}
       </div>
     </div>`;
+  wireAccountMenu(m.querySelector('.acc-overlay'));
   m.querySelector('#edBack').addEventListener('click', () => go('#/home'));
 
   const $ = (s) => m.querySelector(s);
@@ -1123,6 +1147,7 @@ function buildUserDetail(u) {
           <div class="sub">@${esc(u.username)} · sola lettura</div>
         </div>
       </div>
+      <div class="bar-right"><div class="account-slot acc-overlay">${accountMenuMarkup(window.PALESTRA_USER)}</div></div>
     </div>
     <div class="admin-scroll">
       <div class="udetail-wrap">
@@ -1165,6 +1190,7 @@ function buildUserDetail(u) {
         <div id="udSchede"><div class="ud-empty">Caricamento schede…</div></div>
       </div>
     </div>`;
+  wireAccountMenu(m.querySelector('.acc-overlay'));
   m.querySelector('#udBack').addEventListener('click', () => go('#/admin'));
 
   const schedeEl = m.querySelector('#udSchede');
@@ -1197,9 +1223,12 @@ function buildAdmin() {
           <div class="sub" id="adminSub">Caricamento…</div>
         </div>
       </div>
-      <button class="icon-btn" id="adminRefresh" aria-label="Aggiorna">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-      </button>
+      <div class="bar-right">
+        <button class="icon-btn" id="adminRefresh" aria-label="Aggiorna">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        </button>
+        <div class="account-slot acc-overlay">${accountMenuMarkup(window.PALESTRA_USER)}</div>
+      </div>
     </div>
     <div class="admin-scroll">
       <div class="admin-wrap">
@@ -1223,6 +1252,7 @@ function buildAdmin() {
   const resultEl = m.querySelector('#adminResult');
   const searchEl = m.querySelector('#adminSearch');
 
+  wireAccountMenu(m.querySelector('.acc-overlay'));
   m.querySelector('#adminBack').addEventListener('click', () => go('#/home'));
 
   function renderKpis() {
