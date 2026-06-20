@@ -221,9 +221,11 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
       <div class="sheet-grab"></div>
       <div class="sheet-head">
         <div class="sheet-ex">${esc(ex.nome)}</div>
-        <div class="sheet-sub muted">${esc(wk.label || ('W' + (wkIdx + 1)))}${wk.obiettivo ? ' · obiettivo: ' + esc(wk.obiettivo) : ''}</div>
+        <div class="sheet-sub muted">${esc(wk.label || ('W' + (wkIdx + 1)))}</div>
       </div>
       <div class="sheet-body">
+        <label class="field-sm"><span>Obiettivo della settimana</span><input id="logObiettivo" type="text" value="${esc(wk.obiettivo || '')}" placeholder="es. 4 × 7 con 90kg" autocomplete="off" /></label>
+        <div class="sheet-sep">Risultato <span class="muted">(facoltativo)</span></div>
         <div class="log-grid" id="logGrid">
           <label class="field-sm"><span>Serie</span><input id="logSerie" inputmode="numeric" value="${esc(log.serie || '')}" placeholder="4" /></label>
           <label class="field-sm"><span>Reps</span><input id="logReps" inputmode="numeric" value="${esc(log.reps || '')}" placeholder="8" /></label>
@@ -240,7 +242,7 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
         <label class="field-sm"><span>Note</span><textarea id="logNote" rows="2" placeholder="Sensazioni, dettagli…">${esc(log.note || '')}</textarea></label>
       </div>
       <div class="sheet-actions">
-        ${wk.log ? '<button class="btn-ghost" id="logClear">Svuota</button>' : ''}
+        ${(wk.log || wk.obiettivo) ? '<button class="btn-ghost" id="logClear">Svuota</button>' : ''}
         <button class="btn-ghost" id="logCancel">Annulla</button>
         <button class="btn-primary" id="logSave"><span class="lbl">Salva</span><span class="spin-dot" hidden></span></button>
       </div>
@@ -275,32 +277,40 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
   m.addEventListener('click', (e) => { if (e.target === m) close(); });
   m.querySelector('#logCancel').addEventListener('click', close);
   const clearBtn = m.querySelector('#logClear');
-  if (clearBtn) clearBtn.addEventListener('click', () => doSave(null));
+  if (clearBtn) clearBtn.addEventListener('click', () => doSave({ clear: true }));
   m.querySelector('#logSave').addEventListener('click', () => {
-    if (!colore) { toast("Seleziona com'è andata"); return; }
-    const serie = logSerie.value.trim();
-    const reps = logReps.value.trim();
-    const kg = logKg.value.trim();
-    if (colore !== 'rosso' && (!serie || !reps || !kg)) {
-      toast('Inserisci serie, reps e kg'); return;
+    const obiettivo = m.querySelector('#logObiettivo').value.trim();
+    let newLog = null;
+    if (colore) {
+      const serie = logSerie.value.trim();
+      const reps = logReps.value.trim();
+      const kg = logKg.value.trim();
+      if (colore !== 'rosso' && (!serie || !reps || !kg)) { toast('Inserisci serie, reps e kg'); return; }
+      const note = m.querySelector('#logNote').value.trim();
+      newLog = { serie, reps, kg, colore, note, ts: new Date().toISOString() };
     }
-    const note = m.querySelector('#logNote').value.trim();
-    doSave({ serie, reps, kg, colore, note, ts: new Date().toISOString() });
+    doSave({ obiettivo, log: newLog });
   });
 
-  async function doSave(newLog) {
+  async function doSave(payload) {
     const saveBtn = m.querySelector('#logSave');
     const spin = saveBtn.querySelector('.spin-dot'), lbl = saveBtn.querySelector('.lbl');
     saveBtn.disabled = true; spin.hidden = false; lbl.style.opacity = '.5';
-    const prev = wk.log;
-    if (newLog) wk.log = newLog; else delete wk.log;
+    const prevLog = wk.log, prevOb = wk.obiettivo;
+    if (payload.clear) {
+      delete wk.log; delete wk.obiettivo;
+    } else {
+      if (payload.log) wk.log = payload.log; else delete wk.log;
+      if (payload.obiettivo) wk.obiettivo = payload.obiettivo; else delete wk.obiettivo;
+    }
     try {
       await persistGiorni(sch);
       close();
       if (state.view === 'attuale') renderAttuale(); else if (state.view === 'dettaglio') renderDetail();
       toast('Salvato ✓');
     } catch (err) {
-      if (prev !== undefined) wk.log = prev; else delete wk.log;
+      if (prevLog !== undefined) wk.log = prevLog; else delete wk.log;
+      if (prevOb !== undefined) wk.obiettivo = prevOb; else delete wk.obiettivo;
       saveBtn.disabled = false; spin.hidden = true; lbl.style.opacity = '1';
       toast('Salvataggio non riuscito (sei offline?)');
     }

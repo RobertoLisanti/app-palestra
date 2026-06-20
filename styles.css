@@ -237,7 +237,7 @@ main#view {
   border-radius: 9px; padding: 6px 0;
 }
 .prog-body { flex: 1; min-width: 0; }
-.target { font-size: 15px; font-weight: 650; color: var(--text); }
+.target { font-size: 14.5px; font-weight: 550; color: var(--muted); }
 .target.empty { color: var(--muted-2); font-weight: 500; font-style: italic; }
 .feedback {
   margin-top: 4px; font-size: 13.5px; color: var(--muted);
@@ -680,9 +680,13 @@ body.auth-open { overflow: hidden; }
 .sem.c-arancio { background: var(--arancio); }
 .sem.c-rosso { background: var(--bad); }
 
-.logline { margin-top: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.logval { font-size: 14.5px; font-weight: 700; color: var(--text); }
-.logval.muted { color: var(--muted); font-weight: 600; }
+.logline { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.logval {
+  font-size: 13px; font-weight: 800; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--line);
+  padding: 3px 10px; border-radius: 999px;
+}
+.logval.muted { color: var(--muted); font-weight: 600; background: none; border: none; padding: 0; }
 .logts { font-size: 11.5px; color: var(--muted-2); font-weight: 600; margin-left: auto; }
 .lognote { width: 100%; font-size: 13px; color: var(--muted); }
 
@@ -723,6 +727,11 @@ body.sheet-open { overflow: hidden; }
 .sheet-ex { font-size: 17px; font-weight: 750; letter-spacing: -.2px; }
 .sheet-sub { font-size: 13px; margin-top: 3px; }
 .sheet-body { display: flex; flex-direction: column; gap: 14px; }
+.sheet-sep {
+  font-size: 11.5px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase;
+  color: var(--muted); margin: 2px 2px -6px; display: flex; gap: 6px; align-items: baseline;
+}
+.sheet-sep .muted { text-transform: none; letter-spacing: 0; font-weight: 600; }
 .log-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 .field-sm > span { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin: 0 0 6px 2px; }
 .field-sm input, .field-sm textarea {
