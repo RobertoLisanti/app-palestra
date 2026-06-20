@@ -565,6 +565,64 @@ main#view {
 .usch-meta { font-size: 12.5px; margin-top: 2px; }
 .usch-day h5 { margin: 16px 2px 8px; font-size: 13px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: var(--muted); }
 
+/* editor scheda */
+.ed-wrap { max-width: 760px; margin: 0 auto; padding: 18px 18px calc(34px + var(--safe-bottom)); }
+.ed-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 14px;
+}
+.ed-card > h4 { margin: 0 0 12px; font-size: 12px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--accent); }
+.ed-card .field-sm { margin-bottom: 10px; }
+.ed-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ed-row2 .field-sm { margin-bottom: 0; }
+.ed-day {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px; margin-bottom: 12px;
+}
+.ed-day-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ed-day-name {
+  flex: 1; min-width: 0; padding: 9px 11px; font-size: 15px; font-weight: 750; color: var(--text);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; outline: none;
+}
+.ed-day-name:focus { border-color: var(--accent); }
+.ed-day-acts { display: flex; gap: 5px; flex: none; }
+.ed-ex-list { display: flex; flex-direction: column; gap: 8px; }
+.ed-ex {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px;
+}
+.ed-ex-main { flex: 1; min-width: 0; display: flex; gap: 8px; }
+.ed-ex-name { flex: 1; min-width: 0; padding: 9px 11px; font-size: 14.5px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; outline: none; }
+.ed-ex-rec { width: 70px; flex: none; padding: 9px 8px; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; outline: none; text-align: center; }
+.ed-ex-name:focus, .ed-ex-rec:focus { border-color: var(--accent); }
+.ed-ex-acts { display: flex; gap: 4px; flex: none; align-items: center; }
+.ed-ex-acts .u-ic, .ed-day-acts .u-ic { width: 30px; height: 30px; border-radius: 8px; }
+.ed-ex-acts .u-ic svg, .ed-day-acts .u-ic svg { width: 15px; height: 15px; }
+.ex-move {
+  height: 30px; border-radius: 8px; padding: 0 6px; font-size: 12px; max-width: 86px;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); outline: none;
+}
+.ed-add-ex {
+  margin-top: 10px; width: 100%; padding: 9px; cursor: pointer; font-size: 13.5px; font-weight: 700;
+  background: var(--surface-2); border: 1px dashed var(--line); border-radius: 10px; color: var(--accent-2);
+}
+.ed-add-ex:active { transform: scale(.99); }
+.ed-add-day {
+  width: 100%; padding: 13px; cursor: pointer; font-size: 14.5px; font-weight: 800;
+  background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); color: var(--accent);
+  margin-bottom: 14px;
+}
+.ed-add-day:active { transform: scale(.99); }
+.ed-hint { font-size: 12.5px; color: var(--muted); text-align: center; line-height: 1.4; margin: 4px 6px 0; }
+.field-sm .opt { color: var(--muted-2); font-weight: 600; }
+
+/* aggiungi settimana (scheda attuale) */
+.add-week-btn {
+  width: 100%; margin-top: 6px; padding: 13px; cursor: pointer; font-size: 14.5px; font-weight: 800;
+  background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); color: var(--accent);
+}
+.add-week-btn:active { transform: scale(.99); background: var(--surface-2); }
+
 /* anagrafica utente */
 .btn-primary.prof-save { flex: none; padding: 10px 20px; font-size: 14.5px; }
 .prof-wrap { max-width: 720px; margin: 0 auto; padding: 18px 18px calc(34px + var(--safe-bottom)); }

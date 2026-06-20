@@ -65,11 +65,12 @@ function currentWeekIndex(scheda) {
 /* ---------------- data loading (da Supabase) ---------------- */
 function rowsToData(rows) {
   const schede = rows.map((r) => ({
-    id: r.sched_id, fase: r.fase, num: r.num, titolo: r.titolo,
+    id: r.sched_id, fase: r.fase, num: r.num, titolo: r.titolo, descrizione: r.descrizione || '',
     data: r.data, giorni: r.giorni || [], is_current: r.is_current,
   }));
-  let cur = schede.find((s) => s.is_current);
-  if (!cur && schede.length) cur = schede[schede.length - 1];
+  // la corrente è l'ultima marcata is_current (la più recente); fallback: l'ultima inserita
+  const currents = schede.filter((s) => s.is_current);
+  const cur = currents.length ? currents[currents.length - 1] : (schede.length ? schede[schede.length - 1] : null);
   return { correnteId: cur ? cur.id : null, schede };
 }
 
@@ -77,7 +78,7 @@ async function loadData({ fresh = true } = {}) {
   try {
     const { data: rows, error } = await window.sb
       .from('schede')
-      .select('sched_id, fase, num, titolo, data, is_current, giorni')
+      .select('sched_id, fase, num, titolo, descrizione, data, is_current, giorni')
       .order('fase', { ascending: true })
       .order('num', { ascending: true });
     if (error) throw error;
@@ -127,10 +128,31 @@ function renderAttuale() {
   const curWeek = currentWeekIndex(sch);
   html += `<div class="section-head"><h3>${esc(giorno.nome)}</h3><span class="count">${giorno.esercizi.length} esercizi</span></div>`;
   html += giorno.esercizi.map((e, i) => exerciseCard(e, i, curWeek, { editable: true, schedId: sch.id, dayIndex: state.dayIndex })).join('');
+  html += `<button class="add-week-btn" id="addWeekBtn">+ Aggiungi una settimana</button>`;
 
   viewEl.innerHTML = html;
   viewEl.querySelectorAll('.day-pill').forEach((b) =>
     b.addEventListener('click', () => { state.dayIndex = +b.dataset.day; renderAttuale(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
+  const awb = document.getElementById('addWeekBtn');
+  if (awb) awb.addEventListener('click', addWeekToCurrent);
+}
+
+async function addWeekToCurrent() {
+  const sch = currentScheda();
+  if (!sch) return;
+  if (!confirm('Aggiungere una settimana a tutti gli esercizi della scheda attuale?')) return;
+  sch.giorni.forEach((g) => (g.esercizi || []).forEach((e) => {
+    if (!Array.isArray(e.settimane)) e.settimane = [];
+    e.settimane.push({ label: 'W' + (e.settimane.length + 1), obiettivo: '' });
+  }));
+  try {
+    await persistGiorni(sch);
+    renderAttuale();
+    toast('Settimana aggiunta ✓');
+  } catch (err) {
+    sch.giorni.forEach((g) => (g.esercizi || []).forEach((e) => { if (Array.isArray(e.settimane) && e.settimane.length) e.settimane.pop(); }));
+    toast('Operazione non riuscita (sei offline?)');
+  }
 }
 
 function cleanDay(nome, i) {
@@ -456,6 +478,10 @@ function route() {
     if (overlayKey !== 'profilo') { overlayKey = 'profilo'; showOverlay(buildProfile()); }
     return;
   }
+  if (r.name === 'nuova') {
+    if (overlayKey !== 'nuova') { overlayKey = 'nuova'; showOverlay(buildSchedaEditor()); }
+    return;
+  }
   if (r.name === 'admin') {
     if (!owner) { go('#/home'); return; }
     if (r.a === 'utente' && r.b) {
@@ -485,6 +511,7 @@ const HOME_ICONS = {
   history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>',
   user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
   users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18M12 14v4M10 16h4"/></svg>',
   chev: '<svg class="htile-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
 };
 
@@ -512,6 +539,7 @@ function renderHome() {
     </section>
     <div class="htiles">
       ${tile('#/attuale', HOME_ICONS.dumbbell, 'Scheda attuale', sch ? sch.titolo : 'Nessuna scheda', 'accent')}
+      ${tile('#/nuova', HOME_ICONS.plus, 'Crea scheda', 'Archivia l’attuale e creane una nuova')}
       ${tile('#/storico', HOME_ICONS.history, 'Storico', nSchede ? nSchede + ' schede archiviate' : 'Le tue schede passate')}
       ${tile('#/profilo', HOME_ICONS.user, 'Il mio profilo', 'Anagrafica e dati personali')}
       ${owner ? tile('#/admin', HOME_ICONS.users, 'Gestione utenti', 'Dashboard, approvazioni, anagrafiche', 'owner') : ''}
@@ -694,6 +722,212 @@ function buildProfile() {
   });
 
   load();
+  return m;
+}
+
+/* ---------------- editor scheda (crea / archivia) ---------------- */
+const ED_ICONS = {
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  clone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>',
+};
+
+function buildSchedaEditor() {
+  const uid = (window.PALESTRA_USER || {}).id;
+  const today = new Date().toISOString().slice(0, 10);
+  const ed = {
+    giorni: [{ nome: '1° Giorno', esercizi: [{ nome: '', recupero: '' }] }],
+  };
+
+  const schede = (state.data && state.data.schede) ? state.data.schede : [];
+  const correnteId = state.data ? state.data.correnteId : null;
+  const sourceOpts = schede.length
+    ? `<label class="field-sm"><span>Parti da una scheda esistente</span><select id="edSource">
+        <option value="">Scheda vuota</option>
+        ${[...schede].reverse().map((s) => `<option value="${esc(s.id)}">${esc(s.titolo || ('Scheda ' + s.id))} (${esc(s.fase)}.${esc(s.num)})${s.id === correnteId ? ' · attuale' : ''}</option>`).join('')}
+      </select></label>`
+    : '';
+
+  const m = document.createElement('div');
+  m.className = 'admin-screen';
+  m.innerHTML = `
+    <div class="admin-bar">
+      <div class="admin-bar-left">
+        <button class="icon-btn" id="edBack" aria-label="Indietro">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div><h2>Crea scheda</h2><div class="sub">Archivia l’attuale e crea la nuova</div></div>
+      </div>
+      <button class="btn-primary prof-save" id="edSave"><span class="lbl">Crea scheda</span><span class="spin-dot" hidden></span></button>
+    </div>
+    <div class="admin-scroll">
+      <div class="ed-wrap">
+        <div class="ed-card">
+          <h4>Dettagli</h4>
+          ${sourceOpts}
+          <label class="field-sm"><span>Nome scheda</span><input id="edTitolo" type="text" placeholder="es. Fase 4 · Forza" autocomplete="off" /></label>
+          <label class="field-sm"><span>Descrizione <span class="opt">(facoltativa)</span></span><textarea id="edDescr" rows="2" placeholder="Obiettivi, note generali…"></textarea></label>
+          <div class="ed-row2">
+            <label class="field-sm"><span>Settimane</span><input id="edSettimane" type="number" min="1" max="12" inputmode="numeric" value="4" /></label>
+            <label class="field-sm"><span>Inizio</span><input id="edData" type="date" value="${today}" /></label>
+          </div>
+        </div>
+        <div id="edGiorni"></div>
+        <button class="ed-add-day" id="edAddDay">+ Aggiungi giorno</button>
+        <p class="ed-hint">Salvando, la tua scheda attuale verrà archiviata nello storico e questa diventerà l’attuale.</p>
+      </div>
+    </div>`;
+  m.querySelector('#edBack').addEventListener('click', () => go('#/home'));
+
+  const $ = (s) => m.querySelector(s);
+  const edGiorni = $('#edGiorni');
+
+  function exRow(e, di, xi, exTotal, dayTotal) {
+    const moveSel = dayTotal > 1
+      ? `<select class="ex-move" data-act="ex-move" data-day="${di}" data-ex="${xi}"><option value="">Sposta a…</option>${ed.giorni.map((g, j) => j === di ? '' : `<option value="${j}">${esc(g.nome || ('Giorno ' + (j + 1)))}</option>`).join('')}</select>`
+      : '';
+    return `<div class="ed-ex">
+      <div class="ed-ex-main">
+        <input class="ed-ex-name" data-field="ex-nome" data-day="${di}" data-ex="${xi}" value="${esc(e.nome || '')}" placeholder="Nome esercizio" autocomplete="off" />
+        <input class="ed-ex-rec" data-field="ex-rec" data-day="${di}" data-ex="${xi}" value="${esc(e.recupero || '')}" placeholder="rec." autocomplete="off" />
+      </div>
+      <div class="ed-ex-acts">
+        <button class="u-ic" data-act="ex-up" data-day="${di}" data-ex="${xi}" title="Sposta su" ${xi === 0 ? 'disabled' : ''}>${ED_ICONS.up}</button>
+        <button class="u-ic" data-act="ex-down" data-day="${di}" data-ex="${xi}" title="Sposta giù" ${xi === exTotal - 1 ? 'disabled' : ''}>${ED_ICONS.down}</button>
+        ${moveSel}
+        <button class="u-ic danger" data-act="ex-del" data-day="${di}" data-ex="${xi}" title="Elimina esercizio">${ED_ICONS.trash}</button>
+      </div>
+    </div>`;
+  }
+
+  function dayCard(g, di, total) {
+    return `<div class="ed-day">
+      <div class="ed-day-hd">
+        <input class="ed-day-name" data-field="day-nome" data-day="${di}" value="${esc(g.nome || '')}" placeholder="${di + 1}° Giorno" autocomplete="off" />
+        <div class="ed-day-acts">
+          <button class="u-ic" data-act="day-up" data-day="${di}" title="Su" ${di === 0 ? 'disabled' : ''}>${ED_ICONS.up}</button>
+          <button class="u-ic" data-act="day-down" data-day="${di}" title="Giù" ${di === total - 1 ? 'disabled' : ''}>${ED_ICONS.down}</button>
+          <button class="u-ic" data-act="day-clone" data-day="${di}" title="Duplica giorno">${ED_ICONS.clone}</button>
+          <button class="u-ic danger" data-act="day-del" data-day="${di}" title="Elimina giorno">${ED_ICONS.trash}</button>
+        </div>
+      </div>
+      <div class="ed-ex-list">${g.esercizi.map((e, xi) => exRow(e, di, xi, g.esercizi.length, total)).join('')}</div>
+      <button class="ed-add-ex" data-act="ex-add" data-day="${di}">+ Esercizio</button>
+    </div>`;
+  }
+
+  function paint() {
+    edGiorni.innerHTML = ed.giorni.map((g, di) => dayCard(g, di, ed.giorni.length)).join('');
+  }
+  paint();
+
+  // input testuali: aggiornano lo stato senza ridisegnare (niente perdita di focus)
+  edGiorni.addEventListener('input', (e) => {
+    const inp = e.target, f = inp.dataset.field;
+    if (!f) return;
+    const di = +inp.dataset.day;
+    if (f === 'day-nome') ed.giorni[di].nome = inp.value;
+    else if (f === 'ex-nome') ed.giorni[di].esercizi[+inp.dataset.ex].nome = inp.value;
+    else if (f === 'ex-rec') ed.giorni[di].esercizi[+inp.dataset.ex].recupero = inp.value;
+  });
+  edGiorni.addEventListener('change', (e) => {
+    const sel = e.target;
+    if (sel.dataset.act !== 'ex-move') return;
+    const di = +sel.dataset.day, xi = +sel.dataset.ex, to = +sel.value;
+    if (sel.value === '' || isNaN(to) || to === di) return;
+    const [ex] = ed.giorni[di].esercizi.splice(xi, 1);
+    ed.giorni[to].esercizi.push(ex);
+    paint();
+  });
+  edGiorni.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const act = b.dataset.act;
+    const di = b.dataset.day != null ? +b.dataset.day : null;
+    const xi = b.dataset.ex != null ? +b.dataset.ex : null;
+    const G = ed.giorni;
+    if (act === 'ex-add') G[di].esercizi.push({ nome: '', recupero: '' });
+    else if (act === 'ex-del') { G[di].esercizi.splice(xi, 1); if (!G[di].esercizi.length) G[di].esercizi.push({ nome: '', recupero: '' }); }
+    else if (act === 'ex-up' && xi > 0) { const a = G[di].esercizi; [a[xi - 1], a[xi]] = [a[xi], a[xi - 1]]; }
+    else if (act === 'ex-down' && xi < G[di].esercizi.length - 1) { const a = G[di].esercizi; [a[xi + 1], a[xi]] = [a[xi], a[xi + 1]]; }
+    else if (act === 'day-del') { if (G.length > 1) G.splice(di, 1); else { toast('Serve almeno un giorno'); return; } }
+    else if (act === 'day-clone') { const copy = JSON.parse(JSON.stringify(G[di])); copy.nome = (G.length + 1) + '° Giorno'; G.splice(di + 1, 0, copy); }
+    else if (act === 'day-up' && di > 0) { [G[di - 1], G[di]] = [G[di], G[di - 1]]; }
+    else if (act === 'day-down' && di < G.length - 1) { [G[di + 1], G[di]] = [G[di], G[di + 1]]; }
+    else return;
+    paint();
+  });
+
+  $('#edAddDay').addEventListener('click', () => {
+    ed.giorni.push({ nome: (ed.giorni.length + 1) + '° Giorno', esercizi: [{ nome: '', recupero: '' }] });
+    paint();
+  });
+
+  // parti da una scheda esistente
+  const sourceSel = $('#edSource');
+  if (sourceSel) sourceSel.addEventListener('change', () => {
+    const id = sourceSel.value;
+    if (!id) return;
+    const src = schede.find((s) => s.id === id);
+    if (!src) return;
+    if (!confirm('Caricare la struttura di questa scheda? Sostituirà i giorni attuali dell’editor (gli obiettivi e i risultati NON vengono copiati).')) { sourceSel.value = ''; return; }
+    ed.giorni = (src.giorni || []).map((g) => ({
+      nome: g.nome || '',
+      esercizi: (g.esercizi || []).map((e) => ({ nome: e.nome || '', recupero: e.recupero || '' })),
+    }));
+    if (!ed.giorni.length) ed.giorni = [{ nome: '1° Giorno', esercizi: [{ nome: '', recupero: '' }] }];
+    const fw = src.giorni && src.giorni[0] && src.giorni[0].esercizi && src.giorni[0].esercizi[0] && src.giorni[0].esercizi[0].settimane;
+    if (fw && fw.length) $('#edSettimane').value = fw.length;
+    paint();
+  });
+
+  // salva: inserisce la nuova come attuale e archivia le altre
+  $('#edSave').addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    const titolo = $('#edTitolo').value.trim();
+    if (!titolo) { toast('Dai un nome alla scheda'); return; }
+    let settimane = parseInt($('#edSettimane').value, 10);
+    if (isNaN(settimane) || settimane < 1) settimane = 1;
+    if (settimane > 12) settimane = 12;
+    const data = $('#edData').value || today;
+    const descrizione = $('#edDescr').value.trim();
+    const giorni = ed.giorni.map((g, gi) => ({
+      nome: (g.nome || '').trim() || ((gi + 1) + '° Giorno'),
+      esercizi: g.esercizi.filter((e) => (e.nome || '').trim()).map((e) => ({
+        nome: e.nome.trim(), recupero: (e.recupero || '').trim(), note: [],
+        settimane: Array.from({ length: settimane }, (_, i) => ({ label: 'W' + (i + 1), obiettivo: '' })),
+      })),
+    })).filter((g) => g.esercizi.length > 0);
+    if (!giorni.length) { toast('Aggiungi almeno un esercizio con un nome'); return; }
+
+    const all = (state.data && state.data.schede) ? state.data.schede : [];
+    let fase = 1, num = 1;
+    if (all.length) {
+      const mf = Math.max(...all.map((s) => +s.fase || 0)) || 1;
+      const inF = all.filter((s) => (+s.fase || 0) === mf);
+      fase = mf; num = Math.max(0, ...inF.map((s) => +s.num || 0)) + 1;
+    }
+    let sched_id = fase + '.' + num;
+    while (all.some((s) => s.id === sched_id)) { num++; sched_id = fase + '.' + num; }
+
+    const spin = btn.querySelector('.spin-dot'), lbl = btn.querySelector('.lbl');
+    btn.disabled = true; if (spin) spin.hidden = false; if (lbl) lbl.style.opacity = '.5';
+    try {
+      const { data: ins, error } = await window.sb.from('schede')
+        .insert({ user_id: uid, sched_id, fase, num, titolo, descrizione, data, is_current: true, giorni })
+        .select('id').single();
+      if (error) throw error;
+      await window.sb.from('schede').update({ is_current: false }).eq('user_id', uid).neq('id', ins.id);
+      await loadData({ fresh: true });
+      toast('Scheda creata ✓');
+      go('#/attuale');
+    } catch (err) {
+      btn.disabled = false; if (spin) spin.hidden = true; if (lbl) lbl.style.opacity = '1';
+      toast('Creazione non riuscita' + (err && err.message ? ': ' + err.message : ''));
+    }
+  });
+
   return m;
 }
 

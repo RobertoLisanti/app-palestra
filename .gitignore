@@ -6,6 +6,9 @@
 # schede.json resta solo in locale come sorgente per il seed.
 data/
 
+# nota personale, non va pubblicata
+ROADMAP.txt
+
 # os
 Thumbs.db
 .DS_Store
