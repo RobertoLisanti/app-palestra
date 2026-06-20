@@ -732,6 +732,21 @@ body.sheet-open { overflow: hidden; }
   color: var(--muted); margin: 2px 2px -6px; display: flex; gap: 6px; align-items: baseline;
 }
 .sheet-sep .muted { text-transform: none; letter-spacing: 0; font-weight: 600; }
+.sub-cur { color: var(--accent); font-weight: 800; }
+
+/* due sezioni distinte nella bottom-sheet (Obiettivo / Risultato) */
+.log-sec {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 14px; display: flex; flex-direction: column; gap: 12px;
+}
+.log-sec-hd { font-size: 12px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: var(--accent); }
+.sec-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 2px; }
+.sec-actions .btn-primary, .sec-actions .btn-ghost { flex: 0 0 auto; }
+.btn-sm { padding: 10px 16px; font-size: 14px; border-radius: 10px; }
+.log-hint {
+  font-size: 13px; color: var(--muted); text-align: center; line-height: 1.4;
+  background: var(--bg-2); border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 14px;
+}
 .log-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 .field-sm > span { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin: 0 0 6px 2px; }
 .field-sm input, .field-sm textarea {

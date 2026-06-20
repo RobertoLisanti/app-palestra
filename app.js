@@ -151,10 +151,21 @@ function exerciseCard(e, index, curWeek, ctx) {
     ? `<div class="notes">${notes.map((n) => `<div class="note"><span class="dot">›</span><span>${esc(n)}</span></div>`).join('')}</div>`
     : '';
 
+  const PENCIL = '<span class="logedit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>';
+  // settimana "in corso" = prima senza risultato (per-esercizio); se tutte fatte, l'ultima
+  let curIdx = -1;
+  if (editable && weeks.length) {
+    curIdx = weeks.findIndex((w) => !w.log);
+    if (curIdx === -1) curIdx = weeks.length - 1;
+  }
+
   const progHtml = weeks.length ? `<div class="prog">${weeks.map((w, wi) => {
     const hasTarget = !!(w.obiettivo && w.obiettivo.trim());
     const log = w.log || null;
     const colore = (log && log.colore) || '';
+    const isCurrent = editable && wi === curIdx;
+    const isFuture = editable && wi > curIdx;
+    const tappable = isCurrent || isFuture; // corrente: obiettivo+risultato; futura: solo obiettivo
     // risultato segnato (data entry)
     let logHtml = '';
     if (log && (log.serie || log.reps || log.kg || log.note || log.colore)) {
@@ -171,16 +182,12 @@ function exerciseCard(e, index, curWeek, ctx) {
     // feedback storico (solo se non c'è un log)
     const fb = (!log && w.feedback && w.feedback.trim() && w.feedback.trim() !== (w.obiettivo || '').trim())
       ? `<div class="feedback"><span class="q">”</span><span>${esc(w.feedback)}</span></div>` : '';
-    const attrs = editable ? `data-sch="${esc(ctx.schedId)}" data-day="${ctx.dayIndex}" data-ex="${index}" data-wk="${wi}"` : '';
-    const action = editable
-      ? (log
-        ? `<span class="logedit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>`
-        : `<span class="addlog">+ segna</span>`)
-      : '';
-    return `<div class="prog-row ${editable ? 'editable' : ''} ${colore ? 'sem-' + colore : ''}" ${attrs}>
+    const attrs = tappable ? `data-sch="${esc(ctx.schedId)}" data-day="${ctx.dayIndex}" data-ex="${index}" data-wk="${wi}"` : '';
+    const action = isCurrent ? (log ? PENCIL : '<span class="addlog">+ segna</span>') : (isFuture ? PENCIL : '');
+    return `<div class="prog-row ${tappable ? 'editable' : ''} ${isCurrent ? 'is-current' : ''} ${colore ? 'sem-' + colore : ''}" ${attrs}>
       <div class="wbadge">${esc(w.label || ('W' + (wi + 1)))}</div>
       <div class="prog-body">
-        <div class="target ${hasTarget ? '' : 'empty'}">${hasTarget ? esc(w.obiettivo) : '—'}</div>
+        <div class="target ${hasTarget ? '' : 'empty'}">${hasTarget ? esc(w.obiettivo) : '—'}${isCurrent ? '<span class="cur-tag">in corso</span>' : ''}</div>
         ${logHtml}
         ${fb}
       </div>
@@ -214,6 +221,35 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
   const log = wk.log || {};
   let colore = log.colore || '';
 
+  // settimana in corso = prima senza risultato (il risultato si registra solo qui)
+  let curIdx = ex.settimane.findIndex((w) => !w.log);
+  if (curIdx === -1) curIdx = ex.settimane.length - 1;
+  const isCurrent = wkIdx === curIdx;
+
+  const resultSection = isCurrent ? `
+        <div class="log-sec">
+          <div class="log-sec-hd">Risultato</div>
+          <div class="log-grid" id="logGrid">
+            <label class="field-sm"><span>Serie</span><input id="logSerie" inputmode="numeric" value="${esc(log.serie || '')}" placeholder="4" /></label>
+            <label class="field-sm"><span>Reps</span><input id="logReps" inputmode="numeric" value="${esc(log.reps || '')}" placeholder="8" /></label>
+            <label class="field-sm"><span>Kg</span><input id="logKg" inputmode="text" value="${esc(log.kg || '')}" placeholder="50" /></label>
+          </div>
+          <div class="field-sm"><span>Com'è andata</span>
+            <div class="sem-pick" id="logColore">
+              <button type="button" data-c="verde" class="${log.colore === 'verde' ? 'on' : ''}"><span class="sem c-verde"></span>Senza problemi</button>
+              <button type="button" data-c="giallo" class="${log.colore === 'giallo' ? 'on' : ''}"><span class="sem c-giallo"></span>A fatica</button>
+              <button type="button" data-c="arancio" class="${log.colore === 'arancio' ? 'on' : ''}"><span class="sem c-arancio"></span>Non concluso</button>
+              <button type="button" data-c="rosso" class="${log.colore === 'rosso' ? 'on' : ''}"><span class="sem c-rosso"></span>Non fatto</button>
+            </div>
+          </div>
+          <label class="field-sm"><span>Note</span><textarea id="logNote" rows="2" placeholder="Sensazioni, dettagli…">${esc(log.note || '')}</textarea></label>
+          <div class="sec-actions">
+            ${wk.log ? '<button class="btn-ghost btn-sm" id="logClear">Svuota</button>' : ''}
+            <button class="btn-primary btn-sm" id="logSave">Salva risultato</button>
+          </div>
+        </div>`
+    : '<div class="log-hint">Il risultato si registra solo nella settimana in corso.</div>';
+
   const m = document.createElement('div');
   m.className = 'sheet-backdrop';
   m.innerHTML = `
@@ -221,99 +257,88 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
       <div class="sheet-grab"></div>
       <div class="sheet-head">
         <div class="sheet-ex">${esc(ex.nome)}</div>
-        <div class="sheet-sub muted">${esc(wk.label || ('W' + (wkIdx + 1)))}</div>
+        <div class="sheet-sub muted">${esc(wk.label || ('W' + (wkIdx + 1)))}${isCurrent ? ' · <span class="sub-cur">in corso</span>' : ''}</div>
       </div>
       <div class="sheet-body">
-        <label class="field-sm"><span>Obiettivo della settimana</span><input id="logObiettivo" type="text" value="${esc(wk.obiettivo || '')}" placeholder="es. 4 × 7 con 90kg" autocomplete="off" /></label>
-        <div class="sheet-sep">Risultato <span class="muted">(facoltativo)</span></div>
-        <div class="log-grid" id="logGrid">
-          <label class="field-sm"><span>Serie</span><input id="logSerie" inputmode="numeric" value="${esc(log.serie || '')}" placeholder="4" /></label>
-          <label class="field-sm"><span>Reps</span><input id="logReps" inputmode="numeric" value="${esc(log.reps || '')}" placeholder="8" /></label>
-          <label class="field-sm"><span>Kg</span><input id="logKg" inputmode="text" value="${esc(log.kg || '')}" placeholder="50" /></label>
-        </div>
-        <div class="field-sm"><span>Com'è andata</span>
-          <div class="sem-pick" id="logColore">
-            <button type="button" data-c="verde" class="${log.colore === 'verde' ? 'on' : ''}"><span class="sem c-verde"></span>Senza problemi</button>
-            <button type="button" data-c="giallo" class="${log.colore === 'giallo' ? 'on' : ''}"><span class="sem c-giallo"></span>A fatica</button>
-            <button type="button" data-c="arancio" class="${log.colore === 'arancio' ? 'on' : ''}"><span class="sem c-arancio"></span>Non concluso</button>
-            <button type="button" data-c="rosso" class="${log.colore === 'rosso' ? 'on' : ''}"><span class="sem c-rosso"></span>Non fatto</button>
+        <div class="log-sec">
+          <div class="log-sec-hd">Obiettivo</div>
+          <label class="field-sm"><span>Obiettivo della settimana</span><input id="logObiettivo" type="text" value="${esc(wk.obiettivo || '')}" placeholder="es. 4 × 7 con 90kg" autocomplete="off" /></label>
+          <div class="sec-actions">
+            ${wk.obiettivo ? '<button class="btn-ghost btn-sm" id="obClear">Rimuovi</button>' : ''}
+            <button class="btn-primary btn-sm" id="obSave">Salva obiettivo</button>
           </div>
         </div>
-        <label class="field-sm"><span>Note</span><textarea id="logNote" rows="2" placeholder="Sensazioni, dettagli…">${esc(log.note || '')}</textarea></label>
+        ${resultSection}
       </div>
       <div class="sheet-actions">
-        ${(wk.log || wk.obiettivo) ? '<button class="btn-ghost" id="logClear">Svuota</button>' : ''}
-        <button class="btn-ghost" id="logCancel">Annulla</button>
-        <button class="btn-primary" id="logSave"><span class="lbl">Salva</span><span class="spin-dot" hidden></span></button>
+        <button class="btn-ghost" id="logCancel">Chiudi</button>
       </div>
     </div>`;
   document.body.appendChild(m);
   document.body.classList.add('sheet-open');
 
-  const logGrid = m.querySelector('#logGrid');
-  const logSerie = m.querySelector('#logSerie');
-  const logReps = m.querySelector('#logReps');
-  const logKg = m.querySelector('#logKg');
-
-  // solo numeri per serie e reps
-  [logSerie, logReps].forEach((inp) => {
-    inp.addEventListener('input', () => { inp.value = inp.value.replace(/[^0-9]/g, ''); });
-  });
-
-  function syncGridVisibility() {
-    const isRosso = colore === 'rosso';
-    logGrid.hidden = isRosso;
-    if (isRosso) { logSerie.value = ''; logReps.value = ''; logKg.value = ''; }
-  }
-  syncGridVisibility(); // init: se si riapre un log già rosso
-
-  m.querySelectorAll('#logColore button').forEach((b) => b.addEventListener('click', () => {
-    colore = colore === b.dataset.c ? '' : b.dataset.c;
-    m.querySelectorAll('#logColore button').forEach((x) => x.classList.toggle('on', x.dataset.c === colore));
-    syncGridVisibility();
-  }));
-
   const close = () => { m.remove(); document.body.classList.remove('sheet-open'); };
   m.addEventListener('click', (e) => { if (e.target === m) close(); });
   m.querySelector('#logCancel').addEventListener('click', close);
-  const clearBtn = m.querySelector('#logClear');
-  if (clearBtn) clearBtn.addEventListener('click', () => doSave({ clear: true }));
-  m.querySelector('#logSave').addEventListener('click', () => {
-    const obiettivo = m.querySelector('#logObiettivo').value.trim();
-    let newLog = null;
-    if (colore) {
-      const serie = logSerie.value.trim();
-      const reps = logReps.value.trim();
-      const kg = logKg.value.trim();
-      if (colore !== 'rosso' && (!serie || !reps || !kg)) { toast('Inserisci serie, reps e kg'); return; }
-      const note = m.querySelector('#logNote').value.trim();
-      newLog = { serie, reps, kg, colore, note, ts: new Date().toISOString() };
-    }
-    doSave({ obiettivo, log: newLog });
-  });
 
-  async function doSave(payload) {
-    const saveBtn = m.querySelector('#logSave');
-    const spin = saveBtn.querySelector('.spin-dot'), lbl = saveBtn.querySelector('.lbl');
-    saveBtn.disabled = true; spin.hidden = false; lbl.style.opacity = '.5';
+  let busy = false;
+  async function commit(applyFn, okMsg, btn) {
+    if (busy) return;
+    busy = true; if (btn) btn.disabled = true;
     const prevLog = wk.log, prevOb = wk.obiettivo;
-    if (payload.clear) {
-      delete wk.log; delete wk.obiettivo;
-    } else {
-      if (payload.log) wk.log = payload.log; else delete wk.log;
-      if (payload.obiettivo) wk.obiettivo = payload.obiettivo; else delete wk.obiettivo;
-    }
+    applyFn();
     try {
       await persistGiorni(sch);
       close();
       if (state.view === 'attuale') renderAttuale(); else if (state.view === 'dettaglio') renderDetail();
-      toast('Salvato ✓');
+      toast(okMsg);
     } catch (err) {
       if (prevLog !== undefined) wk.log = prevLog; else delete wk.log;
       if (prevOb !== undefined) wk.obiettivo = prevOb; else delete wk.obiettivo;
-      saveBtn.disabled = false; spin.hidden = true; lbl.style.opacity = '1';
+      busy = false; if (btn) btn.disabled = false;
       toast('Salvataggio non riuscito (sei offline?)');
     }
+  }
+
+  // --- sezione Obiettivo ---
+  const obInput = m.querySelector('#logObiettivo');
+  m.querySelector('#obSave').addEventListener('click', (e) => {
+    const v = obInput.value.trim();
+    commit(() => { if (v) wk.obiettivo = v; else delete wk.obiettivo; }, 'Obiettivo salvato ✓', e.currentTarget);
+  });
+  const obClearBtn = m.querySelector('#obClear');
+  if (obClearBtn) obClearBtn.addEventListener('click', (e) => commit(() => { delete wk.obiettivo; }, 'Obiettivo rimosso', e.currentTarget));
+
+  // --- sezione Risultato (solo settimana in corso) ---
+  if (isCurrent) {
+    const logGrid = m.querySelector('#logGrid');
+    const logSerie = m.querySelector('#logSerie');
+    const logReps = m.querySelector('#logReps');
+    const logKg = m.querySelector('#logKg');
+    [logSerie, logReps].forEach((inp) => {
+      inp.addEventListener('input', () => { inp.value = inp.value.replace(/[^0-9]/g, ''); });
+    });
+    function syncGridVisibility() {
+      const isRosso = colore === 'rosso';
+      logGrid.hidden = isRosso;
+      if (isRosso) { logSerie.value = ''; logReps.value = ''; logKg.value = ''; }
+    }
+    syncGridVisibility();
+    m.querySelectorAll('#logColore button').forEach((b) => b.addEventListener('click', () => {
+      colore = colore === b.dataset.c ? '' : b.dataset.c;
+      m.querySelectorAll('#logColore button').forEach((x) => x.classList.toggle('on', x.dataset.c === colore));
+      syncGridVisibility();
+    }));
+    m.querySelector('#logSave').addEventListener('click', (e) => {
+      if (!colore) { toast("Seleziona com'è andata"); return; }
+      const serie = logSerie.value.trim(), reps = logReps.value.trim(), kg = logKg.value.trim();
+      if (colore !== 'rosso' && (!serie || !reps || !kg)) { toast('Inserisci serie, reps e kg'); return; }
+      const note = m.querySelector('#logNote').value.trim();
+      const newLog = { serie, reps, kg, colore, note, ts: new Date().toISOString() };
+      commit(() => { wk.log = newLog; }, 'Risultato salvato ✓', e.currentTarget);
+    });
+    const logClearBtn = m.querySelector('#logClear');
+    if (logClearBtn) logClearBtn.addEventListener('click', (e) => commit(() => { delete wk.log; }, 'Risultato svuotato', e.currentTarget));
   }
 }
 
