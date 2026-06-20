@@ -338,11 +338,7 @@ function renderStorico() {
 
 /* ---------------- render: DETTAGLIO (scheda storica) ---------------- */
 function openDetail(id) {
-  state.schedaId = id;
-  state.dayIndex = 0;
-  state.view = 'dettaglio';
-  renderDetail();
-  window.scrollTo({ top: 0 });
+  go('#/scheda/' + id);
 }
 
 function renderDetail() {
@@ -380,7 +376,7 @@ function renderDetail() {
   html += giorno.esercizi.map((e, i) => exerciseCard(e, i, -1)).join('');
 
   viewEl.innerHTML = html;
-  document.getElementById('backBtn').addEventListener('click', () => { state.view = 'storico'; render(); });
+  document.getElementById('backBtn').addEventListener('click', () => go('#/storico'));
   viewEl.querySelectorAll('.day-pill').forEach((b) =>
     b.addEventListener('click', () => { state.dayIndex = +b.dataset.day; renderDetail(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
 }
@@ -390,25 +386,117 @@ function emptyState(title, sub) {
   return `<div class="empty-state"><div class="big">🏋️</div><h3>${esc(title)}</h3><p>${esc(sub)}</p></div>`;
 }
 
-function render() {
-  document.querySelectorAll('.tab').forEach((t) =>
-    t.classList.toggle('is-active', t.dataset.view === (state.view === 'dettaglio' ? 'storico' : state.view)));
-  if (state.view === 'attuale') renderAttuale();
-  else if (state.view === 'storico') renderStorico();
-  else if (state.view === 'dettaglio') renderDetail();
+/* ---------------- routing (hash) ---------------- */
+const overlayEl = document.getElementById('overlay');
+let overlayKey = null;
+
+function showOverlay(node) {
+  overlayEl.innerHTML = '';
+  overlayEl.appendChild(node);
+  overlayEl.hidden = false;
+  document.body.classList.add('overlay-open');
+}
+function clearOverlay() {
+  overlayEl.innerHTML = '';
+  overlayEl.hidden = true;
+  overlayKey = null;
+  document.body.classList.remove('overlay-open');
+}
+function parseHash() {
+  const parts = (location.hash || '').replace(/^#\/?/, '').split('/').filter(Boolean);
+  return { name: parts[0] || 'home', a: parts[1] || '', b: parts[2] || '' };
+}
+function go(hash) {
+  const h = hash.charAt(0) === '#' ? hash : '#' + hash;
+  if (location.hash === h) route(); else location.hash = h;
 }
 
-function setView(v) {
-  if (state.view === v) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
-  state.view = v;
-  if (v === 'attuale') { state.schedaId = state.data?.correnteId; state.dayIndex = 0; }
+function route() {
+  if (!window.PALESTRA_USER) return;
+  const r = parseHash();
+  const owner = window.PALESTRA_USER.role === 'owner';
+
+  // --- rotte overlay (full-screen sopra la shell) ---
+  if (r.name === 'profilo') {
+    if (overlayKey !== 'profilo') { overlayKey = 'profilo'; showOverlay(buildProfile()); }
+    return;
+  }
+  if (r.name === 'admin') {
+    if (!owner) { go('#/home'); return; }
+    if (r.a === 'utente' && r.b) {
+      const key = 'admin/utente/' + r.b;
+      if (overlayKey !== key) { overlayKey = key; openUserDetailRoute(r.b); }
+      return;
+    }
+    if (overlayKey !== 'admin') { overlayKey = 'admin'; showOverlay(buildAdmin()); }
+    return;
+  }
+
+  // --- rotte principali (dentro la shell) ---
+  if (overlayKey) clearOverlay();
+  if (r.name === 'attuale') { state.view = 'attuale'; state.schedaId = state.data?.correnteId; state.dayIndex = 0; }
+  else if (r.name === 'storico') { state.view = 'storico'; }
+  else if (r.name === 'scheda' && r.a) { state.view = 'dettaglio'; state.schedaId = r.a; state.dayIndex = 0; }
+  else { state.view = 'home'; }
   render();
   window.scrollTo({ top: 0 });
 }
 
+window.addEventListener('hashchange', route);
+
+/* ---------------- home ---------------- */
+const HOME_ICONS = {
+  dumbbell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6.5 6.5 11 11"/><path d="m21 21-1-1M4 4 3 3"/><path d="m20.5 17.5-3 3M3.5 6.5l3-3M2 14l2 2 2-2-2-2zM18 6l2 2 2-2-2-2z"/></svg>',
+  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>',
+  user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  chev: '<svg class="htile-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+};
+
+function renderHome() {
+  const u = window.PALESTRA_USER || {};
+  const owner = u.role === 'owner';
+  const name = u.nome || ('@' + (u.username || 'atleta'));
+  topTitle.textContent = 'AndyGym';
+  topSub.textContent = owner ? 'Area proprietario' : 'La tua area allenamenti';
+
+  const sch = currentScheda();
+  const nSchede = state.data ? state.data.schede.length : 0;
+  const tile = (href, icon, title, sub, accent) =>
+    `<button class="htile ${accent || ''}" data-go="${href}">
+      <span class="htile-ico">${icon}</span>
+      <span class="htile-txt"><span class="htile-t">${esc(title)}</span><span class="htile-s">${esc(sub)}</span></span>
+      ${HOME_ICONS.chev}
+    </button>`;
+
+  let html = `
+    <section class="home-hero">
+      <div class="eyebrow">${owner ? 'Proprietario' : 'Bentornato'}</div>
+      <h2>Ciao, ${esc(name)} 👋</h2>
+      <p class="muted">${sch ? 'Scheda attuale: ' + esc(sch.titolo) : 'Nessuna scheda attiva al momento'}</p>
+    </section>
+    <div class="htiles">
+      ${tile('#/attuale', HOME_ICONS.dumbbell, 'Scheda attuale', sch ? sch.titolo : 'Nessuna scheda', 'accent')}
+      ${tile('#/storico', HOME_ICONS.history, 'Storico', nSchede ? nSchede + ' schede archiviate' : 'Le tue schede passate')}
+      ${tile('#/profilo', HOME_ICONS.user, 'Il mio profilo', 'Anagrafica e dati personali')}
+      ${owner ? tile('#/admin', HOME_ICONS.users, 'Gestione utenti', 'Dashboard, approvazioni, anagrafiche', 'owner') : ''}
+    </div>`;
+  viewEl.innerHTML = html;
+  viewEl.querySelectorAll('.htile').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
+}
+
+function render() {
+  document.querySelectorAll('.tab').forEach((t) =>
+    t.classList.toggle('is-active', t.dataset.view === (state.view === 'dettaglio' ? 'storico' : state.view)));
+  if (state.view === 'home') renderHome();
+  else if (state.view === 'attuale') renderAttuale();
+  else if (state.view === 'storico') renderStorico();
+  else if (state.view === 'dettaglio') renderDetail();
+}
+
 /* ---------------- events ---------------- */
 document.querySelectorAll('.tab').forEach((t) =>
-  t.addEventListener('click', () => setView(t.dataset.view)));
+  t.addEventListener('click', () => go('#/' + t.dataset.view)));
 
 // tap su una settimana (scheda attuale) -> apri inserimento dati
 viewEl.addEventListener('click', (e) => {
@@ -449,16 +537,16 @@ function onUser(user) {
   btn.addEventListener('click', (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
   menu.addEventListener('click', (e) => e.stopPropagation());
   document.addEventListener('click', () => { menu.hidden = true; });
-  host.querySelector('#profileBtn').addEventListener('click', () => { menu.hidden = true; openProfile(); });
+  host.querySelector('#profileBtn').addEventListener('click', () => { menu.hidden = true; go('#/profilo'); });
   const adminBtn = host.querySelector('#adminBtn');
-  if (adminBtn) adminBtn.addEventListener('click', () => { menu.hidden = true; openAdmin(); });
+  if (adminBtn) adminBtn.addEventListener('click', () => { menu.hidden = true; go('#/admin'); });
   host.querySelector('#logoutBtn').addEventListener('click', () => {
     if (window.palestraLogout) window.palestraLogout();
   });
 }
 
 /* ---------------- anagrafica utente ---------------- */
-function openProfile() {
+function buildProfile() {
   const user = window.PALESTRA_USER || {};
   const m = document.createElement('div');
   m.className = 'admin-screen';
@@ -480,10 +568,7 @@ function openProfile() {
         <div id="profBody"><div class="admin-empty">Caricamento…</div></div>
       </div>
     </div>`;
-  document.body.appendChild(m);
-  document.body.classList.add('sheet-open');
-  const close = () => { m.remove(); document.body.classList.remove('sheet-open'); };
-  m.querySelector('#profBack').addEventListener('click', close);
+  m.querySelector('#profBack').addEventListener('click', () => go('#/home'));
 
   const bodyEl = m.querySelector('#profBody');
   const saveBtn = m.querySelector('#profSave');
@@ -566,7 +651,7 @@ function openProfile() {
       window.PALESTRA_USER.nome = nome;
       onUser(window.PALESTRA_USER);
       toast('Profilo salvato ✓');
-      close();
+      go('#/home');
     } catch (err) {
       saveBtn.disabled = false; spin.hidden = true; lbl.style.opacity = '1';
       toast('Salvataggio non riuscito');
@@ -574,6 +659,7 @@ function openProfile() {
   });
 
   load();
+  return m;
 }
 
 /* ---------------- dashboard proprietario ---------------- */
@@ -665,7 +751,18 @@ function schedaReadonly(s) {
   return html + `</div>`;
 }
 
-function openUserDetail(u) {
+let ADMIN_CACHE = [];
+
+async function openUserDetailRoute(id) {
+  let u = ADMIN_CACHE.find((x) => x.id === id);
+  if (!u) {
+    try { const { users } = await adminCall('list'); ADMIN_CACHE = users || []; u = ADMIN_CACHE.find((x) => x.id === id); } catch (_) {}
+  }
+  if (!u) { go('#/admin'); return; }
+  showOverlay(buildUserDetail(u));
+}
+
+function buildUserDetail(u) {
   const a = u.anagrafica || {};
   const sm = STATUS_META[u.status] || STATUS_META.pending;
   const fullName = [u.nome, u.cognome].filter(Boolean).join(' ') || ('@' + u.username);
@@ -729,8 +826,7 @@ function openUserDetail(u) {
         <div id="udSchede"><div class="ud-empty">Caricamento schede…</div></div>
       </div>
     </div>`;
-  document.body.appendChild(m);
-  m.querySelector('#udBack').addEventListener('click', () => m.remove());
+  m.querySelector('#udBack').addEventListener('click', () => go('#/admin'));
 
   const schedeEl = m.querySelector('#udSchede');
   (async () => {
@@ -745,9 +841,10 @@ function openUserDetail(u) {
       schedeEl.innerHTML = `<div class="admin-err">${esc(err.message || 'Errore nel caricamento delle schede')}</div>`;
     }
   })();
+  return m;
 }
 
-function openAdmin() {
+function buildAdmin() {
   const m = document.createElement('div');
   m.className = 'admin-screen';
   m.innerHTML = `
@@ -779,9 +876,6 @@ function openAdmin() {
         <div id="adminResult"><div class="admin-empty">Caricamento…</div></div>
       </div>
     </div>`;
-  document.body.appendChild(m);
-  document.body.classList.add('sheet-open');
-
   let all = [], filter = 'all', query = '';
   const subEl = m.querySelector('#adminSub');
   const kpisEl = m.querySelector('#adminKpis');
@@ -790,8 +884,7 @@ function openAdmin() {
   const resultEl = m.querySelector('#adminResult');
   const searchEl = m.querySelector('#adminSearch');
 
-  const close = () => { m.remove(); document.body.classList.remove('sheet-open'); };
-  m.querySelector('#adminBack').addEventListener('click', close);
+  m.querySelector('#adminBack').addEventListener('click', () => go('#/home'));
 
   function renderKpis() {
     const pend = all.filter((u) => u.status === 'pending').length;
@@ -899,6 +992,7 @@ function openAdmin() {
     try {
       const { users } = await adminCall('list');
       all = users || [];
+      ADMIN_CACHE = all;
       renderKpis();
       renderStats();
       renderSpark();
@@ -916,7 +1010,7 @@ function openAdmin() {
     const b = e.target.closest('.u-ic');
     if (!b) {
       const row = e.target.closest('.at-row');
-      if (row) { const u = all.find((x) => x.id === row.dataset.uid); if (u) openUserDetail(u); }
+      if (row) go('#/admin/utente/' + row.dataset.uid);
       return;
     }
     const act = b.dataset.act, id = b.dataset.id;
@@ -933,14 +1027,15 @@ function openAdmin() {
   });
 
   load();
+  return m;
 }
 
 /* ---------------- boot ---------------- */
 async function boot() {
   viewEl.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   const ok = await loadData({ fresh: true });
-  if (!ok) { viewEl.innerHTML = emptyState('Impossibile caricare i dati', 'Controlla la connessione e riprova.'); return; }
-  render();
+  if (!ok) toast('Offline — alcuni dati potrebbero non essere aggiornati');
+  route(); // mostra la pagina indicata dall'hash (default: home)
 }
 
 if ('serviceWorker' in navigator) {
@@ -964,6 +1059,6 @@ if ('serviceWorker' in navigator) {
 
 // L'app viene avviata dal cancello di autenticazione (auth.js) dopo il login.
 window.PalestraApp = {
-  start() { boot(); if (window.PALESTRA_USER) onUser(window.PALESTRA_USER); },
+  start() { if (window.PALESTRA_USER) onUser(window.PALESTRA_USER); boot(); },
   onUser,
 };

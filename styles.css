@@ -45,6 +45,40 @@ body {
 #app { min-height: 100%; display: flex; flex-direction: column; }
 
 .muted { color: var(--muted); }
+body.overlay-open { overflow: hidden; }
+
+/* ---------- Home ---------- */
+.home-hero {
+  position: relative; overflow: hidden; border-radius: var(--radius);
+  padding: 22px 18px 20px; margin-bottom: 16px;
+  background:
+    radial-gradient(130% 120% at 100% 0%, rgba(155,140,255,.22), transparent 55%),
+    radial-gradient(120% 120% at 0% 0%, rgba(198,251,80,.18), transparent 50%),
+    var(--surface);
+  border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.home-hero .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--accent); }
+.home-hero h2 { margin: 6px 0 4px; font-size: 25px; font-weight: 850; letter-spacing: -.4px; }
+.home-hero p { margin: 0; font-size: 14px; }
+.htiles { display: flex; flex-direction: column; gap: 11px; }
+.htile {
+  display: flex; align-items: center; gap: 14px; cursor: pointer; text-align: left; width: 100%;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; transition: transform .12s ease, border-color .15s ease, background .15s ease;
+}
+.htile:active { transform: scale(.99); }
+.htile:hover { background: var(--surface-2); }
+.htile-ico {
+  width: 46px; height: 46px; border-radius: 13px; flex: none; display: grid; place-items: center;
+  background: var(--surface-2); color: var(--accent-2); border: 1px solid var(--line);
+}
+.htile-ico svg { width: 23px; height: 23px; }
+.htile-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.htile-t { font-size: 16px; font-weight: 750; }
+.htile-s { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.htile-arr { width: 20px; height: 20px; color: var(--muted-2); flex: none; }
+.htile.accent .htile-ico { color: var(--accent-ink); background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; }
+.htile.owner .htile-ico { color: var(--accent-ink); background: linear-gradient(135deg, var(--violet), var(--accent-2)); border-color: transparent; }
 
 /* ---------- Top bar ---------- */
 .topbar {
