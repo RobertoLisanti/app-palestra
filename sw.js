@@ -1,16 +1,14 @@
 /* ============================================================
    Palestra PWA — service worker
-   App shell: cache-first (offline). I dati arrivano da Supabase
-   (richieste cross-origin, non cacheate qui; copia offline in
-   localStorage lato app). Bump SHELL_VERSION quando cambi i file.
+   Strategia:
+   - index.html → network-first (sempre aggiornato), cache come fallback offline
+   - asset versionati (?v=) → cache-first (immutabili a parità di numero)
+   - altri asset statici → cache-first con aggiornamento in background
+   Bump SHELL_VERSION a ogni deploy per forzare l'aggiornamento.
    ============================================================ */
-const SHELL_VERSION = 'shell-v32';
+const SHELL_VERSION = 'shell-v33';
 
-// gli asset versionati (?v=) corrispondono a quelli richiesti da index.html,
-// così la cache-first li serve offline e ogni bump di versione li rinfresca.
-const SHELL_ASSETS = [
-  './',
-  './index.html',
+const STATIC_ASSETS = [
   './styles.css?v=32',
   './app.js?v=32',
   './auth.js?v=32',
@@ -24,15 +22,17 @@ const SHELL_ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_VERSION).then((c) => c.addAll(SHELL_ASSETS)).then(() => self.skipWaiting())
+    caches.open(SHELL_VERSION)
+      .then((c) => c.addAll(STATIC_ASSETS))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== SHELL_VERSION).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== SHELL_VERSION).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
@@ -40,17 +40,29 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-
-  // Solo richieste same-origin (l'app shell). Supabase passa sempre dalla rete.
   if (url.origin !== location.origin) return;
 
+  const isHtml = url.pathname === '/' || url.pathname.endsWith('.html');
+
+  if (isHtml) {
+    // Network-first: l'utente vede sempre la versione più recente.
+    // Se offline, servi l'ultima versione cachata.
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res.ok) caches.open(SHELL_VERSION).then((c) => c.put(req, res.clone()));
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // Asset versionati e statici: cache-first (performance + offline).
   event.respondWith(
     caches.match(req).then((cached) =>
       cached || fetch(req).then((res) => {
-        if (res.ok) {
-          const copy = res.clone();
-          caches.open(SHELL_VERSION).then((c) => c.put(req, copy));
-        }
+        if (res.ok) caches.open(SHELL_VERSION).then((c) => c.put(req, res.clone()));
         return res;
       }).catch(() => cached)
     )
