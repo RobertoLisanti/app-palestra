@@ -1,19 +1,20 @@
-﻿/* ============================================================
+/* ============================================================
    Palestra PWA — service worker
-   Strategia:
-   - index.html → network-first (sempre aggiornato), cache come fallback offline
-   - asset versionati (?v=) → cache-first (immutabili a parità di numero)
-   - altri asset statici → cache-first con aggiornamento in background
-   Bump SHELL_VERSION a ogni deploy per forzare l'aggiornamento.
+   Strategia: NETWORK-FIRST per tutto (same-origin).
+   - Online  → prende sempre i file freschi dalla rete e aggiorna
+               la copia in cache. L'utente ha SEMPRE l'ultima versione
+               senza dover fare nulla (niente svuota-cache, niente
+               reinstallazioni, niente bump di versione).
+   - Offline → serve l'ultima copia salvata in cache.
+   I dati Supabase (cross-origin) passano sempre dalla rete.
    ============================================================ */
-const SHELL_VERSION = 'shell-v35';
+const CACHE = 'andygym-cache';
 
-const STATIC_ASSETS = [
-  './styles.css?v=34',
-  './app.js?v=34',
-  './auth.js?v=34',
-  './config.js?v=34',
-  './vendor/supabase.js',
+// shell minima pre-cachata per il primo avvio offline (best-effort:
+// se un file non c'è non blocca l'installazione).
+const SHELL = [
+  './',
+  './index.html',
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -22,8 +23,8 @@ const STATIC_ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_VERSION)
-      .then((c) => c.addAll(STATIC_ASSETS))
+    caches.open(CACHE)
+      .then((c) => Promise.allSettled(SHELL.map((u) => c.add(u))))
       .then(() => self.skipWaiting())
   );
 });
@@ -31,7 +32,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== SHELL_VERSION).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -40,31 +41,18 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== location.origin) return;
+  if (url.origin !== location.origin) return; // Supabase & co. → rete diretta
 
-  const isHtml = url.pathname === '/' || url.pathname.endsWith('.html');
-
-  if (isHtml) {
-    // Network-first: l'utente vede sempre la versione più recente.
-    // Se offline, servi l'ultima versione cachata.
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          if (res.ok) caches.open(SHELL_VERSION).then((c) => c.put(req, res.clone()));
-          return res;
-        })
-        .catch(() => caches.match(req))
-    );
-    return;
-  }
-
-  // Asset versionati e statici: cache-first (performance + offline).
+  // Network-first: rete fresca, cache come fallback offline.
   event.respondWith(
-    caches.match(req).then((cached) =>
-      cached || fetch(req).then((res) => {
-        if (res.ok) caches.open(SHELL_VERSION).then((c) => c.put(req, res.clone()));
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+        }
         return res;
-      }).catch(() => cached)
-    )
+      })
+      .catch(() => caches.match(req).then((cached) => cached || caches.match('./index.html')))
   );
 });

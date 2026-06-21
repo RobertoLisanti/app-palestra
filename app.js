@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
    Palestra PWA — logica
    Sorgente dati: data/schede.json (generato dagli Excel,
    poi gestito da chat). L'app e' di sola consultazione.
@@ -626,7 +626,7 @@ function renderHome() {
     </section>
     <div class="htiles">
       ${tile('#/attuale', HOME_ICONS.dumbbell, 'Scheda attuale', sch ? sch.titolo : 'Nessuna scheda', 'accent')}
-      ${tile('#/nuova', HOME_ICONS.plus, 'Crea scheda', 'Archivia l'attuale e creane una nuova')}
+      ${tile('#/nuova', HOME_ICONS.plus, 'Crea scheda', 'Archivia l\'attuale e creane una nuova')}
       ${tile('#/storico', HOME_ICONS.history, 'Storico', nSchede ? nSchede + ' schede archiviate' : 'Le tue schede passate')}
       ${tile('#/profilo', HOME_ICONS.user, 'Il mio profilo', 'Anagrafica e dati personali')}
       ${owner ? tile('#/admin', HOME_ICONS.users, 'Gestione utenti', 'Dashboard, approvazioni, anagrafiche', 'owner') : ''}
@@ -859,13 +859,13 @@ function buildSchedaEditor(editId) {
     origSettimane = maxW || 1;
   }
   const headTitle = isEdit ? 'Modifica scheda' : 'Crea scheda';
-  const headSub = isEdit ? 'Modifica la tua scheda' : 'Archivia l'attuale e crea la nuova';
+  const headSub = isEdit ? 'Modifica la tua scheda' : 'Archivia l\'attuale e crea la nuova';
   const saveLbl = isEdit ? 'Salva modifiche' : 'Crea scheda';
   const settimaneVal = isEdit ? origSettimane : 4;
   const dataVal = isEdit ? (editScheda.data || today) : today;
   const titoloVal = isEdit ? (editScheda.titolo || '') : '';
   const descrVal = isEdit ? (editScheda.descrizione || '') : '';
-  const hintHtml = isEdit ? '' : '<p class="ed-hint">Salvando, la tua scheda attuale verrà archiviata nello storico e questa diventerà l'attuale.</p>';
+  const hintHtml = isEdit ? '' : '<p class="ed-hint">Salvando, la tua scheda attuale verrà archiviata nello storico e questa diventerà l\'attuale.</p>';
 
   const sourceOpts = (!isEdit && schede.length)
     ? `<label class="field-sm"><span>Parti da una scheda esistente</span><select id="edSource">
