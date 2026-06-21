@@ -137,6 +137,10 @@ function renderAttuale() {
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
       Modifica scheda
     </button>
+    <button class="sch-edit sch-archive" id="archiveSchedaBtn">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg>
+      Archivia scheda
+    </button>
   </div>`;
 
   viewEl.innerHTML = html;
@@ -148,6 +152,8 @@ function renderAttuale() {
   if (rwb) rwb.addEventListener('click', () => changeWeeksCurrent(-1));
   const esb = document.getElementById('editSchedaBtn');
   if (esb) esb.addEventListener('click', () => go('#/modifica/' + sch.id));
+  const arcb = document.getElementById('archiveSchedaBtn');
+  if (arcb) arcb.addEventListener('click', archiveScheda);
 }
 
 async function changeWeeksCurrent(delta) {
@@ -173,6 +179,25 @@ async function changeWeeksCurrent(delta) {
   } catch (err) {
     sch.giorni = JSON.parse(snapshot);
     toast('Operazione non riuscita (sei offline?)');
+  }
+}
+
+async function archiveScheda() {
+  const sch = currentScheda();
+  if (!sch) return;
+  if (!confirm('Archiviare la scheda attuale?\n\nResterà nello storico ma non sarà più quella in corso.')) return;
+  try {
+    const { error } = await window.sb.from('schede').update({ is_current: false }).eq('sched_id', sch.id);
+    if (error) throw error;
+    const s = state.data.schede.find((x) => x.id === sch.id);
+    if (s) s.is_current = false;
+    state.data.correnteId = null;
+    state.schedaId = null;
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.data)); } catch (_) {}
+    toast('Scheda archiviata ✓');
+    go('#/storico');
+  } catch (err) {
+    toast('Archiviazione non riuscita (sei offline?)');
   }
 }
 
@@ -208,7 +233,8 @@ function exerciseCard(e, index, curWeek, ctx) {
     const colore = (log && log.colore) || '';
     const isCurrent = editable && wi === curIdx;
     const isFuture = editable && wi > curIdx;
-    const tappable = isCurrent || isFuture; // corrente: obiettivo+risultato; futura: solo obiettivo
+    const isPastWithLog = editable && wi < curIdx && !!log;
+    const tappable = isCurrent || isFuture || isPastWithLog;
     // risultato segnato (data entry)
     let logHtml = '';
     if (log && (log.serie || log.reps || log.kg || log.note || log.colore)) {
@@ -226,7 +252,7 @@ function exerciseCard(e, index, curWeek, ctx) {
     const fb = (!log && w.feedback && w.feedback.trim() && w.feedback.trim() !== (w.obiettivo || '').trim())
       ? `<div class="feedback"><span class="q">”</span><span>${esc(w.feedback)}</span></div>` : '';
     const attrs = tappable ? `data-sch="${esc(ctx.schedId)}" data-day="${ctx.dayIndex}" data-ex="${index}" data-wk="${wi}"` : '';
-    const action = isCurrent ? (log ? PENCIL : '<span class="addlog">+ segna</span>') : (isFuture ? PENCIL : '');
+    const action = isCurrent ? (log ? PENCIL : '<span class="addlog">+ segna</span>') : (isFuture || isPastWithLog ? PENCIL : '');
     return `<div class="prog-row ${tappable ? 'editable' : ''} ${isCurrent ? 'is-current' : ''} ${colore ? 'sem-' + colore : ''}" ${attrs}>
       <div class="wbadge">${esc(w.label || ('W' + (wi + 1)))}</div>
       <div class="prog-body">
@@ -270,12 +296,13 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
   const log = wk.log || {};
   let colore = log.colore || '';
 
-  // settimana in corso = prima senza risultato (il risultato si registra solo qui)
+  // settimana in corso = prima senza risultato
   let curIdx = ex.settimane.findIndex((w) => !w.log);
   if (curIdx === -1) curIdx = ex.settimane.length - 1;
   const isCurrent = wkIdx === curIdx;
+  const canEditResult = isCurrent || (wkIdx < curIdx && !!wk.log);
 
-  const resultSection = isCurrent ? `
+  const resultSection = canEditResult ? `
         <div class="log-sec">
           <div class="log-sec-hd">Risultato</div>
           <div class="log-grid" id="logGrid">
@@ -358,8 +385,8 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
   const obClearBtn = m.querySelector('#obClear');
   if (obClearBtn) obClearBtn.addEventListener('click', (e) => commit(() => { delete wk.obiettivo; }, 'Obiettivo rimosso', e.currentTarget));
 
-  // --- sezione Risultato (solo settimana in corso) ---
-  if (isCurrent) {
+  // --- sezione Risultato ---
+  if (canEditResult) {
     const logGrid = m.querySelector('#logGrid');
     const logSerie = m.querySelector('#logSerie');
     const logReps = m.querySelector('#logReps');

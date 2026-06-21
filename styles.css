@@ -643,6 +643,8 @@ main#view {
   background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); color: var(--text);
 }
 .sch-edit:active { transform: scale(.99); background: var(--surface-3); }
+.sch-archive { color: var(--bad); border-color: rgba(255,93,93,.25); }
+.sch-archive:active { background: rgba(255,93,93,.06); }
 
 /* anagrafica utente */
 .btn-primary.prof-save { flex: none; padding: 10px 20px; font-size: 14.5px; }
