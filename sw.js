@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Palestra PWA — service worker
    Strategia:
    - index.html → network-first (sempre aggiornato), cache come fallback offline
@@ -6,13 +6,13 @@
    - altri asset statici → cache-first con aggiornamento in background
    Bump SHELL_VERSION a ogni deploy per forzare l'aggiornamento.
    ============================================================ */
-const SHELL_VERSION = 'shell-v34';
+const SHELL_VERSION = 'shell-v35';
 
 const STATIC_ASSETS = [
-  './styles.css?v=33',
-  './app.js?v=33',
-  './auth.js?v=33',
-  './config.js?v=33',
+  './styles.css?v=34',
+  './app.js?v=34',
+  './auth.js?v=34',
+  './config.js?v=34',
   './vendor/supabase.js',
   './manifest.webmanifest',
   './icons/icon.svg',
