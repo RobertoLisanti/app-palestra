@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Palestra PWA — logica
    Sorgente dati: data/schede.json (generato dagli Excel,
    poi gestito da chat). L'app e' di sola consultazione.
@@ -184,7 +184,7 @@ async function changeWeeksCurrent(delta) {
   const maxLen = Math.max(0, ...sch.giorni.flatMap((g) => (g.esercizi || []).map((e) => (e.settimane || []).length)));
   if (delta < 0) {
     if (maxLen <= 1) { toast('Deve restare almeno una settimana'); return; }
-    if (!await showConfirm(‘I dati di quella settimana verranno persi.’, { title: ‘Togli settimana?’, confirmLabel: ‘Togli’, danger: true })) return;
+    if (!await showConfirm('I dati di quella settimana verranno persi.', { title: 'Togli settimana?', confirmLabel: 'Togli', danger: true })) return;
   } else {
     if (!await showConfirm('Verrà aggiunta una settimana a tutti gli esercizi della scheda.', { title: 'Aggiungi settimana?', confirmLabel: 'Aggiungi' })) return;
   }
@@ -626,7 +626,7 @@ function renderHome() {
     </section>
     <div class="htiles">
       ${tile('#/attuale', HOME_ICONS.dumbbell, 'Scheda attuale', sch ? sch.titolo : 'Nessuna scheda', 'accent')}
-      ${tile('#/nuova', HOME_ICONS.plus, 'Crea scheda', 'Archivia l’attuale e creane una nuova')}
+      ${tile('#/nuova', HOME_ICONS.plus, 'Crea scheda', 'Archivia l'attuale e creane una nuova')}
       ${tile('#/storico', HOME_ICONS.history, 'Storico', nSchede ? nSchede + ' schede archiviate' : 'Le tue schede passate')}
       ${tile('#/profilo', HOME_ICONS.user, 'Il mio profilo', 'Anagrafica e dati personali')}
       ${owner ? tile('#/admin', HOME_ICONS.users, 'Gestione utenti', 'Dashboard, approvazioni, anagrafiche', 'owner') : ''}
@@ -859,13 +859,13 @@ function buildSchedaEditor(editId) {
     origSettimane = maxW || 1;
   }
   const headTitle = isEdit ? 'Modifica scheda' : 'Crea scheda';
-  const headSub = isEdit ? 'Modifica la tua scheda' : 'Archivia l’attuale e crea la nuova';
+  const headSub = isEdit ? 'Modifica la tua scheda' : 'Archivia l'attuale e crea la nuova';
   const saveLbl = isEdit ? 'Salva modifiche' : 'Crea scheda';
   const settimaneVal = isEdit ? origSettimane : 4;
   const dataVal = isEdit ? (editScheda.data || today) : today;
   const titoloVal = isEdit ? (editScheda.titolo || '') : '';
   const descrVal = isEdit ? (editScheda.descrizione || '') : '';
-  const hintHtml = isEdit ? '' : '<p class="ed-hint">Salvando, la tua scheda attuale verrà archiviata nello storico e questa diventerà l’attuale.</p>';
+  const hintHtml = isEdit ? '' : '<p class="ed-hint">Salvando, la tua scheda attuale verrà archiviata nello storico e questa diventerà l'attuale.</p>';
 
   const sourceOpts = (!isEdit && schede.length)
     ? `<label class="field-sm"><span>Parti da una scheda esistente</span><select id="edSource">
@@ -1006,12 +1006,12 @@ function buildSchedaEditor(editId) {
 
   // parti da una scheda esistente
   const sourceSel = $('#edSource');
-  if (sourceSel) sourceSel.addEventListener(‘change’, async () => {
+  if (sourceSel) sourceSel.addEventListener('change', async () => {
     const id = sourceSel.value;
     if (!id) return;
     const src = schede.find((s) => s.id === id);
     if (!src) return;
-    if (!await showConfirm(‘Sostituirà i giorni attuali dell\’editor. Obiettivi e risultati già inseriti NON vengono copiati.’, { title: ‘Caricare questa scheda?’, confirmLabel: ‘Carica’ })) { sourceSel.value = ‘’; return; }
+    if (!await showConfirm('Sostituirà i giorni attuali dell\'editor. Obiettivi e risultati già inseriti NON vengono copiati.', { title: 'Caricare questa scheda?', confirmLabel: 'Carica' })) { sourceSel.value = ''; return; }
     ed.giorni = (src.giorni || []).map((g) => ({
       nome: g.nome || '',
       esercizi: (g.esercizi || []).map((e) => ({
@@ -1458,7 +1458,7 @@ function buildAdmin() {
       return;
     }
     const act = b.dataset.act, id = b.dataset.id;
-    if (act === ‘delete’ && !await showConfirm(‘Verranno cancellati account e tutte le sue schede. Operazione non reversibile.’, { title: ‘Eliminare l\’utente?’, confirmLabel: ‘Elimina’, danger: true })) return;
+    if (act === 'delete' && !await showConfirm('Verranno cancellati account e tutte le sue schede. Operazione non reversibile.', { title: 'Eliminare l\'utente?', confirmLabel: 'Elimina', danger: true })) return;
     b.disabled = true;
     try {
       if (act === 'delete') { await adminCall('delete', { id }); toast('Utente eliminato'); }
