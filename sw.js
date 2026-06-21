@@ -6,13 +6,13 @@
    - altri asset statici → cache-first con aggiornamento in background
    Bump SHELL_VERSION a ogni deploy per forzare l'aggiornamento.
    ============================================================ */
-const SHELL_VERSION = 'shell-v33';
+const SHELL_VERSION = 'shell-v34';
 
 const STATIC_ASSETS = [
-  './styles.css?v=32',
-  './app.js?v=32',
-  './auth.js?v=32',
-  './config.js?v=32',
+  './styles.css?v=33',
+  './app.js?v=33',
+  './auth.js?v=33',
+  './config.js?v=33',
   './vendor/supabase.js',
   './manifest.webmanifest',
   './icons/icon.svg',

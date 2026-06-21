@@ -52,6 +52,28 @@ function toast(msg) {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
 }
 
+/* modale di conferma in-app (rimpiazza confirm() nativo) */
+function showConfirm(msg, { title = '', confirmLabel = 'Conferma', danger = false } = {}) {
+  return new Promise((resolve) => {
+    const m = document.createElement('div');
+    m.className = 'confirm-backdrop';
+    m.innerHTML = `
+      <div class="confirm-box" role="alertdialog" aria-modal="true">
+        ${title ? `<div class="confirm-title">${esc(title)}</div>` : ''}
+        <p class="confirm-msg">${esc(msg)}</p>
+        <div class="confirm-actions">
+          <button class="btn-ghost cfm-cancel">Annulla</button>
+          <button class="btn-primary${danger ? ' btn-danger' : ''} cfm-ok">${esc(confirmLabel)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
+    const close = (v) => { m.remove(); resolve(v); };
+    m.addEventListener('click', (e) => { if (e.target === m) close(false); });
+    m.querySelector('.cfm-cancel').addEventListener('click', () => close(false));
+    m.querySelector('.cfm-ok').addEventListener('click', () => close(true));
+  });
+}
+
 /* settimana "corrente" stimata dalla data di inizio scheda */
 function currentWeekIndex(scheda) {
   if (!scheda?.data) return -1;
@@ -162,9 +184,9 @@ async function changeWeeksCurrent(delta) {
   const maxLen = Math.max(0, ...sch.giorni.flatMap((g) => (g.esercizi || []).map((e) => (e.settimane || []).length)));
   if (delta < 0) {
     if (maxLen <= 1) { toast('Deve restare almeno una settimana'); return; }
-    if (!confirm('Togliere l’ultima settimana da tutti gli esercizi? I dati di quella settimana verranno persi.')) return;
+    if (!await showConfirm(‘I dati di quella settimana verranno persi.’, { title: ‘Togli settimana?’, confirmLabel: ‘Togli’, danger: true })) return;
   } else {
-    if (!confirm('Aggiungere una settimana a tutti gli esercizi della scheda?')) return;
+    if (!await showConfirm('Verrà aggiunta una settimana a tutti gli esercizi della scheda.', { title: 'Aggiungi settimana?', confirmLabel: 'Aggiungi' })) return;
   }
   const snapshot = JSON.stringify(sch.giorni);
   sch.giorni.forEach((g) => (g.esercizi || []).forEach((e) => {
@@ -185,7 +207,7 @@ async function changeWeeksCurrent(delta) {
 async function archiveScheda() {
   const sch = currentScheda();
   if (!sch) return;
-  if (!confirm('Archiviare la scheda attuale?\n\nResterà nello storico ma non sarà più quella in corso.')) return;
+  if (!await showConfirm('Resterà nello storico ma non sarà più quella in corso.', { title: 'Archiviare la scheda?', confirmLabel: 'Archivia', danger: true })) return;
   try {
     const { error } = await window.sb.from('schede').update({ is_current: false }).eq('sched_id', sch.id);
     if (error) throw error;
@@ -984,12 +1006,12 @@ function buildSchedaEditor(editId) {
 
   // parti da una scheda esistente
   const sourceSel = $('#edSource');
-  if (sourceSel) sourceSel.addEventListener('change', () => {
+  if (sourceSel) sourceSel.addEventListener(‘change’, async () => {
     const id = sourceSel.value;
     if (!id) return;
     const src = schede.find((s) => s.id === id);
     if (!src) return;
-    if (!confirm('Caricare la struttura di questa scheda? Sostituirà i giorni attuali dell’editor (gli obiettivi e i risultati NON vengono copiati).')) { sourceSel.value = ''; return; }
+    if (!await showConfirm(‘Sostituirà i giorni attuali dell\’editor. Obiettivi e risultati già inseriti NON vengono copiati.’, { title: ‘Caricare questa scheda?’, confirmLabel: ‘Carica’ })) { sourceSel.value = ‘’; return; }
     ed.giorni = (src.giorni || []).map((g) => ({
       nome: g.nome || '',
       esercizi: (g.esercizi || []).map((e) => ({
@@ -1436,7 +1458,7 @@ function buildAdmin() {
       return;
     }
     const act = b.dataset.act, id = b.dataset.id;
-    if (act === 'delete' && !confirm('Eliminare definitivamente questo utente e tutte le sue schede? L’operazione non è reversibile.')) return;
+    if (act === ‘delete’ && !await showConfirm(‘Verranno cancellati account e tutte le sue schede. Operazione non reversibile.’, { title: ‘Eliminare l\’utente?’, confirmLabel: ‘Elimina’, danger: true })) return;
     b.disabled = true;
     try {
       if (act === 'delete') { await adminCall('delete', { id }); toast('Utente eliminato'); }

@@ -869,3 +869,28 @@ body.sheet-open { overflow: hidden; }
 }
 .btn-primary:active { transform: scale(.98); }
 .btn-primary:disabled { filter: saturate(.6) brightness(.9); cursor: default; }
+
+/* modale di conferma in-app */
+.confirm-backdrop {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,.65); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; animation: fade .15s ease;
+}
+.confirm-box {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 20px; padding: 24px 22px 20px; max-width: 340px; width: 100%;
+  box-shadow: 0 24px 64px rgba(0,0,0,.55);
+  animation: fade .2s ease;
+}
+.confirm-title {
+  font-size: 17px; font-weight: 800; color: var(--text); margin: 0 0 8px;
+}
+.confirm-msg {
+  font-size: 14.5px; color: var(--muted); line-height: 1.6; margin: 0 0 22px;
+}
+.confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.confirm-actions .btn-ghost { flex: none; padding: 11px 18px; font-size: 14.5px; }
+.confirm-actions .btn-primary { flex: none; padding: 11px 20px; font-size: 14.5px; }
+.btn-danger { background: var(--bad) !important; }
+.btn-danger:active { opacity: .85; }
