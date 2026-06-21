@@ -655,14 +655,6 @@ viewEl.addEventListener('click', (e) => {
   openLogModal(row.dataset.sch, +row.dataset.day, +row.dataset.ex, +row.dataset.wk);
 });
 
-const refreshBtn = document.getElementById('refreshBtn');
-refreshBtn.addEventListener('click', async () => {
-  refreshBtn.classList.add('spin');
-  const ok = await loadData({ fresh: true });
-  refreshBtn.classList.remove('spin');
-  render();
-  toast(ok ? 'Aggiornato ✓' : 'Offline — dati salvati');
-});
 
 /* ---------------- account + navigazione (menu in alto a destra) ---------------- */
 function accountMenuMarkup(user) {
@@ -907,7 +899,9 @@ function buildSchedaEditor(editId) {
       </div>
     </div>`;
   wireAccountMenu(m.querySelector('.acc-overlay'));
-  m.querySelector('#edBack').addEventListener('click', () => go('#/home'));
+  // torna da dove si è arrivati: scheda attuale / storico / home
+  const backDest = isEdit ? (wasCurrent ? '#/attuale' : '#/scheda/' + editId) : '#/home';
+  m.querySelector('#edBack').addEventListener('click', () => go(backDest));
 
   const $ = (s) => m.querySelector(s);
   const edGiorni = $('#edGiorni');

@@ -10,8 +10,16 @@
 (function () {
   const cfg = window.PALESTRA_CONFIG;
   const FN = cfg.SUPABASE_URL + '/functions/v1';
+  // Sessione in sessionStorage: resta valida finché l'app è aperta (sopravvive a
+  // reload, refresh e aggiornamenti del service worker), ma si azzera quando
+  // l'app viene chiusa davvero → al riavvio è obbligatorio rifare il login.
   const client = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: window.sessionStorage,
+    },
   });
   window.sb = client;
 
