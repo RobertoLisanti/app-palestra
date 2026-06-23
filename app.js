@@ -676,6 +676,7 @@ function accountMenuMarkup(user) {
       ${navItem('#/nuova', 'Crea scheda')}
       ${navItem('#/profilo', 'Il mio profilo')}
       ${isOwner ? navItem('#/admin', 'Gestione utenti') : ''}
+      ${isOwner ? '<button class="account-action" data-acc="push">Attiva notifiche</button>' : ''}
       <button class="account-logout" data-acc="logout">Esci</button>
     </div>`;
 }
@@ -690,6 +691,7 @@ function wireAccountMenu(host) {
     e.stopPropagation();
     const nav = e.target.closest('[data-go]');
     if (nav) { menu.hidden = true; go(nav.dataset.go); return; }
+    if (e.target.closest('[data-acc="push"]')) { menu.hidden = true; setupPush(true); return; }
     if (e.target.closest('[data-acc="logout"]')) { menu.hidden = true; if (window.palestraLogout) window.palestraLogout(); }
   });
   document.addEventListener('click', () => { menu.hidden = true; });
@@ -1468,12 +1470,82 @@ function buildAdmin() {
   return m;
 }
 
+/* ---------------- notifiche push (solo owner) ---------------- */
+function pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+// salva/aggiorna la sottoscrizione su Supabase
+async function savePushSubscription(sub) {
+  const u = window.PALESTRA_USER;
+  if (!u || !sub) return;
+  const j = sub.toJSON();
+  if (!j.keys) return;
+  await window.sb.from('push_subscriptions').upsert({
+    user_id: u.id,
+    endpoint: j.endpoint,
+    p256dh: j.keys.p256dh,
+    auth: j.keys.auth,
+    user_agent: navigator.userAgent.slice(0, 300),
+  }, { onConflict: 'endpoint' });
+}
+
+// interactive=true → chiede il permesso e dà feedback (dal menu);
+// interactive=false → riabbona in silenzio all'avvio se già concesso.
+async function setupPush(interactive) {
+  const key = (window.PALESTRA_CONFIG || {}).VAPID_PUBLIC;
+  if (!pushSupported() || !key) {
+    if (interactive) toast('Le notifiche non sono supportate su questo dispositivo');
+    return false;
+  }
+  let perm = Notification.permission;
+  if (perm === 'denied') {
+    if (interactive) toast('Notifiche bloccate: abilitale dalle impostazioni del browser');
+    return false;
+  }
+  if (perm === 'default') {
+    if (!interactive) return false; // niente prompt a sorpresa all'avvio
+    perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('Permesso notifiche non concesso'); return false; }
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key),
+      });
+    }
+    await savePushSubscription(sub);
+    if (interactive) toast('Notifiche attivate ✓');
+    return true;
+  } catch (e) {
+    if (interactive) toast('Attivazione notifiche non riuscita');
+    return false;
+  }
+}
+
 /* ---------------- boot ---------------- */
 async function boot() {
   viewEl.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   const ok = await loadData({ fresh: true });
   if (!ok) toast('Offline — alcuni dati potrebbero non essere aggiornati');
   route(); // mostra la pagina indicata dall'hash (default: home)
+  // owner: se il permesso è già concesso, riabbona in silenzio (mantiene fresca la sub)
+  if (window.PALESTRA_USER && window.PALESTRA_USER.role === 'owner'
+      && 'Notification' in window && Notification.permission === 'granted') {
+    setupPush(false);
+  }
 }
 
 if ('serviceWorker' in navigator) {

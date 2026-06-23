@@ -37,6 +37,39 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+/* ---- Notifiche push ---- */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_) { data = {}; }
+  const title = data.title || 'AndyGym';
+  const options = {
+    body: data.body || '',
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    data: { url: data.url || './' },
+    tag: 'andygym-signup',
+    renotify: true,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || './';
+  event.waitUntil((async () => {
+    const all = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of all) {
+      // se l'app è già aperta, portala in primo piano e naviga
+      if ('focus' in c) {
+        try { await c.focus(); } catch (_) {}
+        try { c.navigate(target); } catch (_) {}
+        return;
+      }
+    }
+    if (clients.openWindow) await clients.openWindow(target);
+  })());
+});
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
