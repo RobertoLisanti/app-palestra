@@ -1492,16 +1492,23 @@ function urlBase64ToUint8Array(base64String) {
 // salva/aggiorna la sottoscrizione su Supabase
 async function savePushSubscription(sub) {
   const u = window.PALESTRA_USER;
-  if (!u || !sub) return;
+  if (!u) throw new Error('sessione assente');
+  if (!sub) throw new Error('nessuna sottoscrizione');
   const j = sub.toJSON();
-  if (!j.keys) return;
-  await window.sb.from('push_subscriptions').upsert({
+  if (!j.keys || !j.keys.p256dh || !j.keys.auth) throw new Error('sottoscrizione senza chiavi');
+  const { error } = await window.sb.from('push_subscriptions').upsert({
     user_id: u.id,
     endpoint: j.endpoint,
     p256dh: j.keys.p256dh,
     auth: j.keys.auth,
     user_agent: navigator.userAgent.slice(0, 300),
   }, { onConflict: 'endpoint' });
+  if (error) throw new Error('salvataggio: ' + (error.message || 'errore database'));
+}
+
+function isStandalone() {
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+    || window.navigator.standalone === true;
 }
 
 // interactive=true → chiede il permesso e dà feedback (dal menu);
@@ -1522,8 +1529,11 @@ async function setupPush(interactive) {
     perm = await Notification.requestPermission();
     if (perm !== 'granted') { toast('Permesso notifiche non concesso'); return false; }
   }
+  let stage = 'init';
   try {
+    stage = 'service worker';
     const reg = await navigator.serviceWorker.ready;
+    stage = 'sottoscrizione';
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
       sub = await reg.pushManager.subscribe({
@@ -1531,11 +1541,18 @@ async function setupPush(interactive) {
         applicationServerKey: urlBase64ToUint8Array(key),
       });
     }
+    stage = 'salvataggio';
     await savePushSubscription(sub);
     if (interactive) toast('Notifiche attivate ✓');
     return true;
   } catch (e) {
-    if (interactive) toast('Attivazione notifiche non riuscita');
+    // iPhone: il subscribe fallisce se l'app non è installata sulla schermata Home
+    const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (stage === 'sottoscrizione' && iOS && !isStandalone()) {
+      if (interactive) toast('Su iPhone aggiungi prima l’app alla schermata Home, poi riprova');
+    } else if (interactive) {
+      toast('Notifiche, errore (' + stage + '): ' + ((e && e.message) || 'non riuscito'));
+    }
     return false;
   }
 }
