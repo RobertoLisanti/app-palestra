@@ -1141,7 +1141,12 @@ function adminUserRow(u) {
     actions = '<span class="u-self">Tu · proprietario</span>';
   } else {
     const del = iconBtn('delete', u.id, 'Elimina', ADMIN_ICONS.trash, 'danger');
-    if (u.status === 'pending') actions = iconBtn('approve', u.id, 'Approva', ADMIN_ICONS.check, 'ok') + del;
+    if (u.status === 'pending') {
+      const appr = u.email_confirmed
+        ? iconBtn('approve', u.id, 'Approva', ADMIN_ICONS.check, 'ok')
+        : `<button class="u-ic ok" disabled title="L'utente deve prima confermare l'email" aria-label="Approva (email da confermare)">${ADMIN_ICONS.check}</button>`;
+      actions = appr + del;
+    }
     else if (u.status === 'approved') actions = iconBtn('block', u.id, 'Blocca', ADMIN_ICONS.ban, 'warn') + del;
     else actions = iconBtn('approve', u.id, 'Sblocca', ADMIN_ICONS.check, 'ok') + del;
   }
