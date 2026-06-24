@@ -1557,12 +1557,52 @@ async function setupPush(interactive) {
   }
 }
 
+/* ---------------- controllo accesso attivo (blocco/eliminazione immediati) ----------------
+   I token JWT restano validi ~1h: se l'owner blocca o elimina un utente, la sua
+   sessione aperta resterebbe attiva. Qui l'app verifica periodicamente (e quando
+   torna in primo piano) di essere ancora approvata; altrimenti logout immediato.
+   Lato server le sessioni vengono anche revocate (vedi edge function admin). */
+let _kicking = false;
+function forceLogout(reason) {
+  if (_kicking) return;
+  _kicking = true;
+  try { sessionStorage.setItem('palestra.kick', reason); } catch (_) {}
+  if (window.palestraLogout) window.palestraLogout(); else location.reload();
+}
+
+async function enforceAccountActive() {
+  const u = window.PALESTRA_USER;
+  if (!u || _kicking) return;
+  let res;
+  try {
+    res = await window.sb.from('profiles').select('status').eq('id', u.id).maybeSingle();
+  } catch (_) { return; }            // errore di rete: non sloggare
+  if (res.error) return;             // errore transitorio: non sloggare
+  if (res.data === null) { forceLogout('Il tuo account non è più disponibile.'); return; }
+  if (res.data.status !== 'approved') {
+    forceLogout(res.data.status === 'blocked'
+      ? 'Il tuo accesso è stato sospeso. Contatta il proprietario.'
+      : 'Il tuo accesso non è attivo.');
+  }
+}
+
+let _accountWatch = false;
+function startAccountWatch() {
+  if (_accountWatch) return;
+  _accountWatch = true;
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) enforceAccountActive(); });
+  window.addEventListener('focus', enforceAccountActive);
+  setInterval(enforceAccountActive, 30000); // ogni 30s mentre l'app è aperta
+  enforceAccountActive();                    // controllo iniziale
+}
+
 /* ---------------- boot ---------------- */
 async function boot() {
   viewEl.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   const ok = await loadData({ fresh: true });
   if (!ok) toast('Offline — alcuni dati potrebbero non essere aggiornati');
   route(); // mostra la pagina indicata dall'hash (default: home)
+  startAccountWatch(); // logout immediato se l'account viene bloccato/eliminato
   // owner: se il permesso è già concesso, riabbona in silenzio (mantiene fresca la sub)
   if (window.PALESTRA_USER && window.PALESTRA_USER.role === 'owner'
       && 'Notification' in window && Notification.permission === 'granted') {

@@ -242,6 +242,13 @@
     let session = null;
     try { const r = await client.auth.getSession(); session = r.data.session; } catch (_) {}
     if (session) onAuthed(session);
-    else showOverlay();
+    else {
+      showOverlay();
+      // messaggio dopo un logout forzato (account bloccato/eliminato)
+      try {
+        const kicked = sessionStorage.getItem('palestra.kick');
+        if (kicked) { msg(kicked); sessionStorage.removeItem('palestra.kick'); }
+      } catch (_) {}
+    }
   })();
 })();
