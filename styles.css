@@ -458,6 +458,29 @@ main#view {
 .at-row { padding: 12px 18px; border-bottom: 1px solid var(--line); font-size: 13.5px; transition: background .12s ease; }
 .at-row:last-child { border-bottom: none; }
 .at-row:hover { background: var(--surface-2); }
+/* intestazioni ordinabili */
+.at-head .th-sort { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+.at-head .th-sort.num { justify-content: center; }
+.at-head .th-sort:hover { color: var(--text); }
+.at-head .th-sort.on { color: var(--accent-2); }
+.sort-arr { font-size: 9px; line-height: 1; }
+/* paginazione */
+.admin-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; flex-wrap: wrap; }
+.pg-btn { padding: 9px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--text); font-weight: 700; font-size: 13px; cursor: pointer; }
+.pg-btn:active { background: var(--surface-2); }
+.pg-btn:disabled { opacity: .4; cursor: default; }
+.pg-info { font-size: 13px; color: var(--muted); font-weight: 600; }
+/* export CSV */
+.admin-export { display: inline-flex; align-items: center; gap: 7px; padding: 11px 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); font-weight: 700; font-size: 13.5px; cursor: pointer; white-space: nowrap; }
+.admin-export:active { background: var(--surface-2); }
+.admin-export svg { width: 16px; height: 16px; }
+/* badge richieste in attesa sull'icona account */
+.acc-badge {
+  position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+  border: 2px solid var(--bg); pointer-events: none; box-sizing: border-box;
+}
 .at-user { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .at-uwrap { min-width: 0; }
 .u-avatar {

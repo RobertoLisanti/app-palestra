@@ -657,13 +657,33 @@ viewEl.addEventListener('click', (e) => {
 
 
 /* ---------------- account + navigazione (menu in alto a destra) ---------------- */
+let PENDING_COUNT = 0; // richieste in attesa (badge sull'icona account, solo owner)
+
+function setPendingBadge(n) {
+  PENDING_COUNT = Math.max(0, n | 0);
+  const txt = PENDING_COUNT > 99 ? '99+' : String(PENDING_COUNT);
+  document.querySelectorAll('[data-acc-badge]').forEach((el) => {
+    if (PENDING_COUNT > 0) { el.textContent = txt; el.hidden = false; }
+    else { el.textContent = ''; el.hidden = true; }
+  });
+}
+
+async function refreshPendingBadge() {
+  if (!window.PALESTRA_USER || window.PALESTRA_USER.role !== 'owner') return;
+  try { const { count } = await adminCall('pending_count'); setPendingBadge(count || 0); } catch (_) {}
+}
+
 function accountMenuMarkup(user) {
   user = user || {};
   const isOwner = user.role === 'owner';
   const initial = (user.username || user.nome || '?').trim().charAt(0).toUpperCase();
   const navItem = (href, label) => `<button class="account-action" data-go="${href}">${esc(label)}</button>`;
+  const badge = isOwner
+    ? `<span class="acc-badge" data-acc-badge${PENDING_COUNT > 0 ? '' : ' hidden'}>${PENDING_COUNT > 0 ? (PENDING_COUNT > 99 ? '99+' : PENDING_COUNT) : ''}</span>`
+    : '';
   return `
     <button class="icon-btn account-btn" data-acc="toggle" aria-label="Menu">${esc(initial)}</button>
+    ${badge}
     <div class="account-menu" data-acc="menu" hidden>
       <div class="account-info">
         <div class="account-name">${esc(user.nome || ('@' + (user.username || 'account')))}${isOwner ? '<span class="owner-tag">proprietario</span>' : ''}</div>
@@ -1316,11 +1336,16 @@ function buildAdmin() {
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
             <input id="adminSearch" type="text" placeholder="Cerca per nome, username o email" autocomplete="off" autocapitalize="none" />
           </div>
+          <button class="admin-export" id="adminExport" title="Esporta l'elenco in CSV">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            Esporta CSV
+          </button>
         </div>
         <div id="adminResult"><div class="admin-empty">Caricamento…</div></div>
       </div>
     </div>`;
-  let all = [], filter = 'all', query = '';
+  let all = [], filter = 'all', query = '', sortKey = 'created_at', sortDir = -1, page = 1;
+  const PAGE_SIZE = 15;
   const subEl = m.querySelector('#adminSub');
   const kpisEl = m.querySelector('#adminKpis');
   const statsEl = m.querySelector('#adminStats');
@@ -1404,26 +1429,85 @@ function buildAdmin() {
     }
   }
 
-  function renderList() {
+  function filteredList() {
     let list = all.filter(matchFilter);
     if (query) {
       const q = query.toLowerCase();
       list = list.filter((u) => ((u.nome || '') + ' ' + (u.cognome || '') + ' ' + (u.username || '') + ' ' + (u.email || '')).toLowerCase().includes(q));
     }
-    if (!list.length) {
+    return list;
+  }
+
+  function sortValue(u, key) {
+    switch (key) {
+      case 'user': return (([u.nome, u.cognome].filter(Boolean).join(' ') || u.username || '')).toLowerCase();
+      case 'email': return (u.email || '').toLowerCase();
+      case 'schede': return u.schede || 0;
+      case 'created_at': return new Date(u.created_at || 0).getTime() || 0;
+      case 'last_sign_in_at': return u.last_sign_in_at ? (new Date(u.last_sign_in_at).getTime() || 0) : -1;
+      case 'status': return ({ pending: 0, approved: 1, blocked: 2 })[u.status] ?? 9;
+      default: return 0;
+    }
+  }
+
+  function cmp(a, b) {
+    const va = sortValue(a, sortKey), vb = sortValue(b, sortKey);
+    const r = (typeof va === 'number' && typeof vb === 'number') ? (va - vb) : String(va).localeCompare(String(vb), 'it');
+    return r * sortDir;
+  }
+
+  function renderList() {
+    const list = filteredList().sort(cmp);
+    const total = list.length;
+    if (!total) {
       resultEl.innerHTML = `<div class="admin-empty">Nessun utente${query ? ' per “' + esc(query) + '”' : filter !== 'all' ? ' con questo criterio' : ''}.</div>`;
       return;
     }
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (page > pages) page = pages;
+    if (page < 1) page = 1;
+    const pageItems = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const arrow = (k) => sortKey === k ? `<span class="sort-arr">${sortDir > 0 ? '▲' : '▼'}</span>` : '';
+    const th = (k, label, cls) => `<span class="th-sort ${cls || ''} ${sortKey === k ? 'on' : ''}" data-sort="${k}">${label}${arrow(k)}</span>`;
+    const pager = pages > 1 ? `<div class="admin-pager">
+        <button class="pg-btn" data-pg="prev" ${page <= 1 ? 'disabled' : ''}>‹ Precedente</button>
+        <span class="pg-info">Pagina ${page} di ${pages} · ${total} utenti</span>
+        <button class="pg-btn" data-pg="next" ${page >= pages ? 'disabled' : ''}>Successiva ›</button>
+      </div>` : '';
     resultEl.innerHTML = `<div class="admin-table">
       <div class="at-head">
-        <span>Utente</span><span>Email</span><span class="num">Schede</span><span>Iscritto</span><span>Ultimo accesso</span><span>Stato</span><span class="ar">Azioni</span>
+        ${th('user', 'Utente')}${th('email', 'Email')}${th('schede', 'Schede', 'num')}${th('created_at', 'Iscritto')}${th('last_sign_in_at', 'Ultimo accesso')}${th('status', 'Stato')}<span class="ar">Azioni</span>
       </div>
-      ${list.map(adminUserRow).join('')}
-    </div>`;
+      ${pageItems.map(adminUserRow).join('')}
+    </div>${pager}`;
+  }
+
+  function exportCSV() {
+    const list = filteredList().sort(cmp);
+    const statusLbl = (s) => ({ pending: 'In attesa', approved: 'Attivo', blocked: 'Bloccato' })[s] || s;
+    const cols = ['Nome', 'Cognome', 'Username', 'Email', 'Stato', 'Email confermata', 'Iscritto il', 'Ultimo accesso', 'Schede'];
+    const rows = list.map((u) => [
+      u.nome || '', u.cognome || '', u.username || '', u.email || '',
+      statusLbl(u.status), u.email_confirmed ? 'Sì' : 'No',
+      u.created_at ? fmtDate(String(u.created_at).slice(0, 10)) : '',
+      u.last_sign_in_at ? fmtTs(u.last_sign_in_at) : '',
+      String(u.schede || 0),
+    ]);
+    const cell = (v) => { v = String(v); return /[";\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const sep = ';';
+    const csv = '﻿' + [cols.join(sep), ...rows.map((r) => r.map(cell).join(sep))].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'utenti-andygym-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(list.length + (list.length === 1 ? ' utente esportato' : ' utenti esportati'));
   }
 
   function setFilter(f) {
     filter = (filter === f && f !== 'all') ? 'all' : f; // ri-cliccare lo stesso filtro lo annulla
+    page = 1;
     renderKpis();
     renderStats();
     renderList();
@@ -1431,13 +1515,15 @@ function buildAdmin() {
 
   kpisEl.addEventListener('click', (e) => { const b = e.target.closest('.kpi'); if (b) setFilter(b.dataset.f); });
   statsEl.addEventListener('click', (e) => { const b = e.target.closest('.stat.is-filter'); if (b) setFilter(b.dataset.f); });
-  searchEl.addEventListener('input', () => { query = searchEl.value.trim(); renderList(); });
+  searchEl.addEventListener('input', () => { query = searchEl.value.trim(); page = 1; renderList(); });
+  m.querySelector('#adminExport').addEventListener('click', exportCSV);
 
   async function load() {
     try {
       const { users } = await adminCall('list');
       all = users || [];
       ADMIN_CACHE = all;
+      setPendingBadge(all.filter((u) => u.status === 'pending').length);
       renderKpis();
       renderStats();
       renderSpark();
@@ -1452,6 +1538,23 @@ function buildAdmin() {
   refreshBtn.addEventListener('click', async () => { refreshBtn.classList.add('spin'); await load(); refreshBtn.classList.remove('spin'); });
 
   resultEl.addEventListener('click', async (e) => {
+    // ordinamento per colonna
+    const thSort = e.target.closest('.th-sort');
+    if (thSort) {
+      const k = thSort.dataset.sort;
+      if (sortKey === k) sortDir = -sortDir;
+      else { sortKey = k; sortDir = (k === 'created_at' || k === 'last_sign_in_at' || k === 'schede') ? -1 : 1; }
+      page = 1;
+      renderList();
+      return;
+    }
+    // paginazione
+    const pg = e.target.closest('.pg-btn');
+    if (pg) {
+      if (pg.dataset.pg === 'prev') page -= 1; else page += 1;
+      renderList();
+      return;
+    }
     const b = e.target.closest('.u-ic');
     if (!b) {
       const row = e.target.closest('.at-row');
@@ -1603,6 +1706,7 @@ async function boot() {
   if (!ok) toast('Offline — alcuni dati potrebbero non essere aggiornati');
   route(); // mostra la pagina indicata dall'hash (default: home)
   startAccountWatch(); // logout immediato se l'account viene bloccato/eliminato
+  refreshPendingBadge(); // owner: badge richieste in attesa sull'icona account
   // owner: se il permesso è già concesso, riabbona in silenzio (mantiene fresca la sub)
   if (window.PALESTRA_USER && window.PALESTRA_USER.role === 'owner'
       && 'Notification' in window && Notification.permission === 'granted') {
