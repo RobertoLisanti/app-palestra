@@ -242,7 +242,6 @@ function obiettivoText(ob) {
   const parts = [];
   if (ob.serie || ob.reps) parts.push(`${esc(ob.serie || '–')} × ${esc(ob.reps || '–')}`);
   if (ob.peso) parts.push(/^\d+([.,]\d+)?$/.test(ob.peso) ? esc(ob.peso) + ' kg' : esc(ob.peso));
-  if (ob.rest) parts.push('rec ' + esc(ob.rest));
   return parts.join(' · ');
 }
 
@@ -250,9 +249,14 @@ function exerciseCard(e, index, curWeek, ctx) {
   const editable = !!(ctx && ctx.editable);
   const notes = (e.note || []).filter(Boolean);
   const weeks = e.settimane || [];
-  const rest = e.recupero
-    ? `<span class="ex-rest"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M12 1h0M9 1h6"/></svg>${esc(e.recupero)}</span>`
-    : '';
+  const restIco = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M12 1h0M9 1h6"/></svg>';
+  let rest = '';
+  if (editable) {
+    // cronometro cliccabile: imposta il rest dell'esercizio (min:sec)
+    rest = `<button class="ex-rest ex-rest-btn" data-rest-sch="${esc(ctx.schedId)}" data-rest-day="${ctx.dayIndex}" data-rest-ex="${index}" title="Imposta il recupero">${restIco}${e.recupero ? esc(e.recupero) : 'rest'}</button>`;
+  } else if (e.recupero) {
+    rest = `<span class="ex-rest">${restIco}${esc(e.recupero)}</span>`;
+  }
 
   const notesHtml = notes.length
     ? `<div class="notes">${notes.map((n) => `<div class="note"><span class="dot">›</span><span>${esc(n)}</span></div>`).join('')}</div>`
@@ -385,7 +389,6 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
             <label class="field-sm"><span>Reps</span><input id="obReps" inputmode="numeric" value="${esc(ob.reps || '')}" placeholder="8" /></label>
             <label class="field-sm"><span>Peso</span><input id="obPeso" inputmode="text" value="${esc(ob.peso || '')}" placeholder="50" /></label>
           </div>
-          <label class="field-sm"><span>Rest (recupero)</span><input id="obRest" inputmode="text" value="${esc(ob.rest || '')}" placeholder="es. 90s, 2'" autocomplete="off" /></label>
           ${obLegacy ? `<div class="log-hint">Obiettivo precedente: ${esc(obLegacy)}</div>` : ''}
           <div class="sec-actions">
             ${hasObiettivo(wk.obiettivo) ? '<button class="btn-ghost btn-sm" id="obClear">Rimuovi</button>' : ''}
@@ -424,13 +427,13 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
     }
   }
 
-  // --- sezione Obiettivo (serie/reps/peso/rest) ---
+  // --- sezione Obiettivo (serie/reps/peso) ---
   const obSerie = m.querySelector('#obSerie'), obReps = m.querySelector('#obReps');
-  const obPeso = m.querySelector('#obPeso'), obRest = m.querySelector('#obRest');
+  const obPeso = m.querySelector('#obPeso');
   [obSerie, obReps].forEach((inp) => inp.addEventListener('input', () => { inp.value = inp.value.replace(/[^0-9]/g, ''); }));
   m.querySelector('#obSave').addEventListener('click', (e) => {
-    const o = { serie: obSerie.value.trim(), reps: obReps.value.trim(), peso: obPeso.value.trim(), rest: obRest.value.trim() };
-    const any = o.serie || o.reps || o.peso || o.rest;
+    const o = { serie: obSerie.value.trim(), reps: obReps.value.trim(), peso: obPeso.value.trim() };
+    const any = o.serie || o.reps || o.peso;
     commit(() => { if (any) wk.obiettivo = o; else delete wk.obiettivo; }, 'Obiettivo salvato ✓', e.currentTarget);
   });
   const obClearBtn = m.querySelector('#obClear');
@@ -467,6 +470,116 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
     const logClearBtn = m.querySelector('#logClear');
     if (logClearBtn) logClearBtn.addEventListener('click', (e) => commit(() => { delete wk.log; }, 'Risultato svuotato', e.currentTarget));
   }
+}
+
+/* ---------------- cronometro recupero (per esercizio) ---------------- */
+function parseRest(s) {
+  s = String(s == null ? '' : s).trim();
+  let mm = s.match(/^(\d+)\s*:\s*(\d{1,2})$/);          // "2:00"
+  if (mm) return { min: +mm[1], sec: Math.min(59, +mm[2]) };
+  mm = s.match(/^(\d+)\s*'\s*(\d{1,2})?/);              // "2'" o "2'30"
+  if (mm) return { min: +mm[1], sec: mm[2] ? Math.min(59, +mm[2]) : 0 };
+  mm = s.match(/^(\d+)\s*s/i);                          // "90s"
+  if (mm) { const t = +mm[1]; return { min: Math.floor(t / 60), sec: t % 60 }; }
+  mm = s.match(/^(\d+)$/);                              // numero secco -> secondi
+  if (mm) { const t = +mm[1]; return { min: Math.floor(t / 60), sec: t % 60 }; }
+  return { min: 0, sec: 0 };
+}
+function formatRest(min, sec) {
+  min = Math.max(0, min | 0); sec = Math.max(0, Math.min(59, sec | 0));
+  return min + ':' + String(sec).padStart(2, '0');
+}
+
+function openRestModal(schId, dayIdx, exIdx) {
+  const sch = schedaById(schId);
+  const ex = sch && sch.giorni[dayIdx] && sch.giorni[dayIdx].esercizi[exIdx];
+  if (!ex) return;
+  const cur = parseRest(ex.recupero);
+
+  const m = document.createElement('div');
+  m.className = 'sheet-backdrop';
+  m.innerHTML = `
+    <div class="sheet rest-sheet" role="dialog" aria-modal="true">
+      <div class="sheet-grab"></div>
+      <div class="sheet-head">
+        <div class="sheet-ex">Recupero</div>
+        <div class="sheet-sub muted">${esc(ex.nome)}</div>
+      </div>
+      <div class="sheet-body">
+        <div class="rest-pick">
+          <div class="rest-col">
+            <button class="rest-step" data-step="min-up" aria-label="Più minuti">+</button>
+            <div class="rest-val" id="restMin">${cur.min}</div>
+            <div class="rest-unit">min</div>
+            <button class="rest-step" data-step="min-down" aria-label="Meno minuti">−</button>
+          </div>
+          <div class="rest-colon">:</div>
+          <div class="rest-col">
+            <button class="rest-step" data-step="sec-up" aria-label="Più secondi">+</button>
+            <div class="rest-val" id="restSec">${String(cur.sec).padStart(2, '0')}</div>
+            <div class="rest-unit">sec</div>
+            <button class="rest-step" data-step="sec-down" aria-label="Meno secondi">−</button>
+          </div>
+        </div>
+        <div class="rest-presets">
+          <button class="rest-preset" data-preset="60">1:00</button>
+          <button class="rest-preset" data-preset="90">1:30</button>
+          <button class="rest-preset" data-preset="120">2:00</button>
+          <button class="rest-preset" data-preset="180">3:00</button>
+        </div>
+        <div class="sec-actions">
+          ${ex.recupero ? '<button class="btn-ghost btn-sm" id="restClear">Rimuovi</button>' : ''}
+          <button class="btn-primary btn-sm" id="restSave">Salva recupero</button>
+        </div>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn-ghost" id="restCancel">Chiudi</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  document.body.classList.add('sheet-open');
+
+  let min = cur.min, sec = cur.sec;
+  const minEl = m.querySelector('#restMin'), secEl = m.querySelector('#restSec');
+  const draw = () => { minEl.textContent = min; secEl.textContent = String(sec).padStart(2, '0'); };
+  const close = () => { m.remove(); document.body.classList.remove('sheet-open'); };
+  m.addEventListener('click', (e) => { if (e.target === m) close(); });
+  m.querySelector('#restCancel').addEventListener('click', close);
+
+  m.querySelectorAll('.rest-step').forEach((b) => b.addEventListener('click', () => {
+    const s = b.dataset.step;
+    if (s === 'min-up') min = Math.min(59, min + 1);
+    else if (s === 'min-down') min = Math.max(0, min - 1);
+    else if (s === 'sec-up') sec = sec >= 45 ? 0 : sec + 15;
+    else if (s === 'sec-down') sec = sec <= 0 ? 45 : sec - 15;
+    draw();
+  }));
+  m.querySelectorAll('.rest-preset').forEach((b) => b.addEventListener('click', () => {
+    const t = +b.dataset.preset; min = Math.floor(t / 60); sec = t % 60; draw();
+  }));
+
+  let busy = false;
+  async function persist(val, okMsg, btn) {
+    if (busy) return; busy = true; if (btn) btn.disabled = true;
+    const prev = ex.recupero;
+    if (val) ex.recupero = val; else delete ex.recupero;
+    try {
+      await persistGiorni(sch);
+      close();
+      if (state.view === 'attuale') renderAttuale(); else if (state.view === 'dettaglio') renderDetail();
+      toast(okMsg);
+    } catch (err) {
+      if (prev !== undefined) ex.recupero = prev; else delete ex.recupero;
+      busy = false; if (btn) btn.disabled = false;
+      toast('Salvataggio non riuscito (sei offline?)');
+    }
+  }
+  m.querySelector('#restSave').addEventListener('click', (e) => {
+    const val = (min === 0 && sec === 0) ? '' : formatRest(min, sec);
+    persist(val, 'Recupero salvato ✓', e.currentTarget);
+  });
+  const restClearBtn = m.querySelector('#restClear');
+  if (restClearBtn) restClearBtn.addEventListener('click', (e) => persist('', 'Recupero rimosso', e.currentTarget));
 }
 
 /* ---------------- render: STORICO ---------------- */
@@ -679,6 +792,8 @@ document.querySelectorAll('.tab').forEach((t) =>
 
 // tap su una settimana (scheda attuale) -> apri inserimento dati
 viewEl.addEventListener('click', (e) => {
+  const restBtn = e.target.closest('.ex-rest-btn');
+  if (restBtn) { openRestModal(restBtn.dataset.restSch, +restBtn.dataset.restDay, +restBtn.dataset.restEx); return; }
   const row = e.target.closest('.prog-row.editable');
   if (!row) return;
   openLogModal(row.dataset.sch, +row.dataset.day, +row.dataset.ex, +row.dataset.wk);
