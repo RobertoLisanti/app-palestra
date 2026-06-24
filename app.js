@@ -191,7 +191,7 @@ async function changeWeeksCurrent(delta) {
   const snapshot = JSON.stringify(sch.giorni);
   sch.giorni.forEach((g) => (g.esercizi || []).forEach((e) => {
     if (!Array.isArray(e.settimane)) e.settimane = [];
-    if (delta > 0) e.settimane.push({ label: 'W' + (e.settimane.length + 1), obiettivo: '' });
+    if (delta > 0) e.settimane.push({ label: 'W' + (e.settimane.length + 1) });
     else if (e.settimane.length > 1) e.settimane.pop();
   }));
   try {
@@ -229,6 +229,23 @@ function cleanDay(nome, i) {
   return m || '';
 }
 
+/* obiettivo settimana: ora strutturato {serie,reps,peso,rest}.
+   Compatibile col vecchio formato a testo libero (stringa). */
+function hasObiettivo(ob) {
+  if (!ob) return false;
+  if (typeof ob === 'string') return ob.trim() !== '';
+  return !!(ob.serie || ob.reps || ob.peso || ob.rest);
+}
+function obiettivoText(ob) {
+  if (!ob) return '';
+  if (typeof ob === 'string') return esc(ob.trim());
+  const parts = [];
+  if (ob.serie || ob.reps) parts.push(`${esc(ob.serie || '–')} × ${esc(ob.reps || '–')}`);
+  if (ob.peso) parts.push(/^\d+([.,]\d+)?$/.test(ob.peso) ? esc(ob.peso) + ' kg' : esc(ob.peso));
+  if (ob.rest) parts.push('rec ' + esc(ob.rest));
+  return parts.join(' · ');
+}
+
 function exerciseCard(e, index, curWeek, ctx) {
   const editable = !!(ctx && ctx.editable);
   const notes = (e.note || []).filter(Boolean);
@@ -250,7 +267,7 @@ function exerciseCard(e, index, curWeek, ctx) {
   }
 
   const progHtml = weeks.length ? `<div class="prog">${weeks.map((w, wi) => {
-    const hasTarget = !!(w.obiettivo && w.obiettivo.trim());
+    const hasTarget = hasObiettivo(w.obiettivo);
     const log = w.log || null;
     const colore = (log && log.colore) || '';
     const isCurrent = editable && wi === curIdx;
@@ -271,14 +288,15 @@ function exerciseCard(e, index, curWeek, ctx) {
       }
     }
     // feedback storico (solo se non c'è un log)
-    const fb = (!log && w.feedback && w.feedback.trim() && w.feedback.trim() !== (w.obiettivo || '').trim())
+    const obRaw = typeof w.obiettivo === 'string' ? w.obiettivo.trim() : '';
+    const fb = (!log && w.feedback && w.feedback.trim() && w.feedback.trim() !== obRaw)
       ? `<div class="feedback"><span class="q">”</span><span>${esc(w.feedback)}</span></div>` : '';
     const attrs = tappable ? `data-sch="${esc(ctx.schedId)}" data-day="${ctx.dayIndex}" data-ex="${index}" data-wk="${wi}"` : '';
     const action = isCurrent ? (log ? PENCIL : '<span class="addlog">+ segna</span>') : (isFuture || isPastWithLog ? PENCIL : '');
     return `<div class="prog-row ${tappable ? 'editable' : ''} ${isCurrent ? 'is-current' : ''} ${colore ? 'sem-' + colore : ''}" ${attrs}>
       <div class="wbadge">${esc(w.label || ('W' + (wi + 1)))}</div>
       <div class="prog-body">
-        <div class="target ${hasTarget ? '' : 'empty'}">${hasTarget ? esc(w.obiettivo) : '—'}${isCurrent ? '<span class="cur-tag">in corso</span>' : ''}</div>
+        <div class="target ${hasTarget ? '' : 'empty'}">${hasTarget ? obiettivoText(w.obiettivo) : '—'}${isCurrent ? '<span class="cur-tag">in corso</span>' : ''}</div>
         ${logHtml}
         ${fb}
       </div>
@@ -317,6 +335,8 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
   if (!wk) return;
   const log = wk.log || {};
   let colore = log.colore || '';
+  const ob = (wk.obiettivo && typeof wk.obiettivo === 'object') ? wk.obiettivo : {};
+  const obLegacy = (typeof wk.obiettivo === 'string') ? wk.obiettivo.trim() : '';
 
   // settimana in corso = prima senza risultato
   let curIdx = ex.settimane.findIndex((w) => !w.log);
@@ -360,9 +380,15 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
       <div class="sheet-body">
         <div class="log-sec">
           <div class="log-sec-hd">Obiettivo</div>
-          <label class="field-sm"><span>Obiettivo della settimana</span><input id="logObiettivo" type="text" value="${esc(wk.obiettivo || '')}" placeholder="es. 4 × 7 con 90kg" autocomplete="off" /></label>
+          <div class="log-grid">
+            <label class="field-sm"><span>Serie</span><input id="obSerie" inputmode="numeric" value="${esc(ob.serie || '')}" placeholder="4" /></label>
+            <label class="field-sm"><span>Reps</span><input id="obReps" inputmode="numeric" value="${esc(ob.reps || '')}" placeholder="8" /></label>
+            <label class="field-sm"><span>Peso</span><input id="obPeso" inputmode="text" value="${esc(ob.peso || '')}" placeholder="50" /></label>
+          </div>
+          <label class="field-sm"><span>Rest (recupero)</span><input id="obRest" inputmode="text" value="${esc(ob.rest || '')}" placeholder="es. 90s, 2'" autocomplete="off" /></label>
+          ${obLegacy ? `<div class="log-hint">Obiettivo precedente: ${esc(obLegacy)}</div>` : ''}
           <div class="sec-actions">
-            ${wk.obiettivo ? '<button class="btn-ghost btn-sm" id="obClear">Rimuovi</button>' : ''}
+            ${hasObiettivo(wk.obiettivo) ? '<button class="btn-ghost btn-sm" id="obClear">Rimuovi</button>' : ''}
             <button class="btn-primary btn-sm" id="obSave">Salva obiettivo</button>
           </div>
         </div>
@@ -398,11 +424,14 @@ function openLogModal(schId, dayIdx, exIdx, wkIdx) {
     }
   }
 
-  // --- sezione Obiettivo ---
-  const obInput = m.querySelector('#logObiettivo');
+  // --- sezione Obiettivo (serie/reps/peso/rest) ---
+  const obSerie = m.querySelector('#obSerie'), obReps = m.querySelector('#obReps');
+  const obPeso = m.querySelector('#obPeso'), obRest = m.querySelector('#obRest');
+  [obSerie, obReps].forEach((inp) => inp.addEventListener('input', () => { inp.value = inp.value.replace(/[^0-9]/g, ''); }));
   m.querySelector('#obSave').addEventListener('click', (e) => {
-    const v = obInput.value.trim();
-    commit(() => { if (v) wk.obiettivo = v; else delete wk.obiettivo; }, 'Obiettivo salvato ✓', e.currentTarget);
+    const o = { serie: obSerie.value.trim(), reps: obReps.value.trim(), peso: obPeso.value.trim(), rest: obRest.value.trim() };
+    const any = o.serie || o.reps || o.peso || o.rest;
+    commit(() => { if (any) wk.obiettivo = o; else delete wk.obiettivo; }, 'Obiettivo salvato ✓', e.currentTarget);
   });
   const obClearBtn = m.querySelector('#obClear');
   if (obClearBtn) obClearBtn.addEventListener('click', (e) => commit(() => { delete wk.obiettivo; }, 'Obiettivo rimosso', e.currentTarget));
@@ -863,11 +892,11 @@ function buildSchedaEditor(editId) {
   const isEdit = !!editScheda;
   const wasCurrent = isEdit && editId === correnteId;
 
-  const ed = { giorni: [{ nome: '1° Giorno', esercizi: [{ nome: '', recupero: '' }] }] };
+  const ed = { giorni: [{ nome: '1° Giorno', esercizi: [{ nome: '' }] }] };
   let origSettimane = 4;
   if (isEdit) {
     ed.giorni = JSON.parse(JSON.stringify(editScheda.giorni || []));
-    if (!ed.giorni.length) ed.giorni = [{ nome: '1° Giorno', esercizi: [{ nome: '', recupero: '' }] }];
+    if (!ed.giorni.length) ed.giorni = [{ nome: '1° Giorno', esercizi: [{ nome: '' }] }];
     let maxW = 0;
     ed.giorni.forEach((g) => (g.esercizi || []).forEach((e) => { if (Array.isArray(e.settimane)) maxW = Math.max(maxW, e.settimane.length); }));
     origSettimane = maxW || 1;
@@ -943,12 +972,6 @@ function buildSchedaEditor(editId) {
           <button class="u-ic danger" data-act="ex-del" data-day="${di}" data-ex="${xi}" title="Elimina esercizio">${ED_ICONS.trash}</button>
         </div>
       </div>
-      <div class="ed-ex-row2">
-        <input class="ed-ex-sm" data-field="ex-serie" data-day="${di}" data-ex="${xi}" value="${esc(e.serie || '')}" placeholder="serie" autocomplete="off" />
-        <span class="ed-x">×</span>
-        <input class="ed-ex-sm" data-field="ex-reps" data-day="${di}" data-ex="${xi}" value="${esc(e.reps || '')}" placeholder="reps" autocomplete="off" />
-        <input class="ed-ex-sm" data-field="ex-rec" data-day="${di}" data-ex="${xi}" value="${esc(e.recupero || '')}" placeholder="rec." autocomplete="off" />
-      </div>
       <input class="ed-ex-note" data-field="ex-note" data-day="${di}" data-ex="${xi}" value="${esc(noteVal)}" placeholder="Nota a cui fare attenzione (facoltativa)" autocomplete="off" />
     </div>`;
   }
@@ -982,9 +1005,6 @@ function buildSchedaEditor(editId) {
     if (f === 'day-nome') { ed.giorni[di].nome = inp.value; return; }
     const ex = ed.giorni[di].esercizi[+inp.dataset.ex];
     if (f === 'ex-nome') ex.nome = inp.value;
-    else if (f === 'ex-rec') ex.recupero = inp.value;
-    else if (f === 'ex-serie') ex.serie = inp.value;
-    else if (f === 'ex-reps') ex.reps = inp.value;
     else if (f === 'ex-note') ex.note = inp.value;
   });
   edGiorni.addEventListener('change', (e) => {
@@ -1003,8 +1023,8 @@ function buildSchedaEditor(editId) {
     const di = b.dataset.day != null ? +b.dataset.day : null;
     const xi = b.dataset.ex != null ? +b.dataset.ex : null;
     const G = ed.giorni;
-    if (act === 'ex-add') G[di].esercizi.push({ nome: '', recupero: '' });
-    else if (act === 'ex-del') { G[di].esercizi.splice(xi, 1); if (!G[di].esercizi.length) G[di].esercizi.push({ nome: '', recupero: '' }); }
+    if (act === 'ex-add') G[di].esercizi.push({ nome: '' });
+    else if (act === 'ex-del') { G[di].esercizi.splice(xi, 1); if (!G[di].esercizi.length) G[di].esercizi.push({ nome: '' }); }
     else if (act === 'ex-up' && xi > 0) { const a = G[di].esercizi; [a[xi - 1], a[xi]] = [a[xi], a[xi - 1]]; }
     else if (act === 'ex-down' && xi < G[di].esercizi.length - 1) { const a = G[di].esercizi; [a[xi + 1], a[xi]] = [a[xi], a[xi + 1]]; }
     else if (act === 'day-del') { if (G.length > 1) G.splice(di, 1); else { toast('Serve almeno un giorno'); return; } }
@@ -1016,7 +1036,7 @@ function buildSchedaEditor(editId) {
   });
 
   $('#edAddDay').addEventListener('click', () => {
-    ed.giorni.push({ nome: (ed.giorni.length + 1) + '° Giorno', esercizi: [{ nome: '', recupero: '' }] });
+    ed.giorni.push({ nome: (ed.giorni.length + 1) + '° Giorno', esercizi: [{ nome: '' }] });
     paint();
   });
 
@@ -1031,11 +1051,11 @@ function buildSchedaEditor(editId) {
     ed.giorni = (src.giorni || []).map((g) => ({
       nome: g.nome || '',
       esercizi: (g.esercizi || []).map((e) => ({
-        nome: e.nome || '', serie: e.serie || '', reps: e.reps || '', recupero: e.recupero || '',
+        nome: e.nome || '',
         note: Array.isArray(e.note) ? e.note.filter(Boolean).join(' ') : (e.note || ''),
       })),
     }));
-    if (!ed.giorni.length) ed.giorni = [{ nome: '1° Giorno', esercizi: [{ nome: '', recupero: '' }] }];
+    if (!ed.giorni.length) ed.giorni = [{ nome: '1° Giorno', esercizi: [{ nome: '' }] }];
     const fw = src.giorni && src.giorni[0] && src.giorni[0].esercizi && src.giorni[0].esercizi[0] && src.giorni[0].esercizi[0].settimane;
     if (fw && fw.length) $('#edSettimane').value = fw.length;
     paint();
@@ -1052,13 +1072,13 @@ function buildSchedaEditor(editId) {
     const data = $('#edData').value || today;
     const descrizione = $('#edDescr').value.trim();
     const weeksChanged = !isEdit || settimane !== origSettimane;
-    const empties = (n) => Array.from({ length: n }, (_, i) => ({ label: 'W' + (i + 1), obiettivo: '' }));
+    const empties = (n) => Array.from({ length: n }, (_, i) => ({ label: 'W' + (i + 1) }));
     const exSettimane = (e) => {
       const ws = Array.isArray(e.settimane) ? e.settimane : null;
       if (!ws) return empties(settimane);                 // esercizio nuovo
       if (!weeksChanged) return ws.map((w, i) => Object.assign({}, w, { label: 'W' + (i + 1) }));
       const out = [];
-      for (let i = 0; i < settimane; i++) out.push(ws[i] ? Object.assign({}, ws[i], { label: 'W' + (i + 1) }) : { label: 'W' + (i + 1), obiettivo: '' });
+      for (let i = 0; i < settimane; i++) out.push(ws[i] ? Object.assign({}, ws[i], { label: 'W' + (i + 1) }) : { label: 'W' + (i + 1) });
       return out;
     };
     const giorni = ed.giorni.map((g, gi) => ({
@@ -1067,9 +1087,6 @@ function buildSchedaEditor(editId) {
         const noteStr = Array.isArray(e.note) ? e.note.filter(Boolean).join(' ') : (e.note || '');
         return {
           nome: e.nome.trim(),
-          serie: (e.serie || '').trim(),
-          reps: (e.reps || '').trim(),
-          recupero: (e.recupero || '').trim(),
           note: noteStr.trim() ? [noteStr.trim()] : [],
           settimane: exSettimane(e),
         };
