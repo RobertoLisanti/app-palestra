@@ -12,6 +12,8 @@ const state = {
   view: 'attuale',      // 'attuale' | 'storico' | 'dettaglio'
   schedaId: null,       // scheda mostrata in dettaglio/attuale
   dayIndex: 0,
+  detailTab: 'scheda',  // 'scheda' | 'progressi' (dettaglio storico)
+  progMetric: 'peso',   // 'peso' | 'volume' (grafico progressi)
 };
 
 const viewEl = document.getElementById('view');
@@ -613,6 +615,7 @@ function renderStorico() {
 
 /* ---------------- render: DETTAGLIO (scheda storica) ---------------- */
 function openDetail(id) {
+  state.detailTab = 'scheda';
   go('#/scheda/' + id);
 }
 
@@ -641,25 +644,133 @@ function renderDetail() {
       </div>
     </section>`;
 
+  const tab = state.detailTab === 'progressi' ? 'progressi' : 'scheda';
+  html += `<div class="detail-tabs">
+      <button data-tab="scheda" class="${tab === 'scheda' ? 'on' : ''}">Scheda</button>
+      <button data-tab="progressi" class="${tab === 'progressi' ? 'on' : ''}">📈 Progressi</button>
+    </div>`;
+
   html += `<div class="days">` + sch.giorni.map((g, i) => `
     <button class="day-pill ${i === state.dayIndex ? 'is-active' : ''}" data-day="${i}">
       <span class="n">Giorno ${i + 1}</span>${esc(cleanDay(g.nome, i))}
     </button>`).join('') + `</div>`;
 
   const giorno = sch.giorni[state.dayIndex];
-  html += `<div class="section-head"><h3>${esc(giorno.nome)}</h3><span class="count">${giorno.esercizi.length} esercizi</span></div>`;
-  html += giorno.esercizi.map((e, i) => exerciseCard(e, i, -1)).join('');
-  html += `<div class="sch-footer"><button class="sch-edit" id="editSchedaBtn">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-      Modifica scheda
-    </button></div>`;
+  if (tab === 'progressi') {
+    html += `<div class="section-head"><h3>Progressi · ${esc(cleanDay(giorno.nome, state.dayIndex))}</h3><span class="count">settimana per settimana</span></div>`;
+    html += renderProgressi(giorno);
+  } else {
+    html += `<div class="section-head"><h3>${esc(giorno.nome)}</h3><span class="count">${giorno.esercizi.length} esercizi</span></div>`;
+    html += giorno.esercizi.map((e, i) => exerciseCard(e, i, -1)).join('');
+    html += `<div class="sch-footer"><button class="sch-edit" id="editSchedaBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        Modifica scheda
+      </button></div>`;
+  }
 
   viewEl.innerHTML = html;
   document.getElementById('backBtn').addEventListener('click', () => go('#/storico'));
+  viewEl.querySelectorAll('.detail-tabs button').forEach((b) =>
+    b.addEventListener('click', () => { state.detailTab = b.dataset.tab; renderDetail(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
+  viewEl.querySelectorAll('.prog-metric button').forEach((b) =>
+    b.addEventListener('click', () => { state.progMetric = b.dataset.metric; renderDetail(); }));
   viewEl.querySelectorAll('.day-pill').forEach((b) =>
     b.addEventListener('click', () => { state.dayIndex = +b.dataset.day; renderDetail(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
   const esb = document.getElementById('editSchedaBtn');
   if (esb) esb.addEventListener('click', () => go('#/modifica/' + sch.id));
+}
+
+/* ---------------- grafici progressi (scheda storica) ---------------- */
+const SEM_COLOR = { verde: 'var(--ok)', giallo: 'var(--warn)', arancio: 'var(--arancio)', rosso: 'var(--bad)' };
+
+function numVal(x) {
+  if (x == null) return null;
+  const m = String(x).replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+  return m ? parseFloat(m[0]) : null;
+}
+
+// punti loggati di un esercizio per la metrica scelta
+function exSeries(e, metric) {
+  const weeks = e.settimane || [];
+  const pts = [];
+  weeks.forEach((w, wi) => {
+    const log = w.log;
+    if (!log) return;
+    const kg = numVal(log.kg);
+    const reps = numVal(log.reps);
+    const serie = numVal(log.serie);
+    let val = null;
+    if (metric === 'volume') {
+      if (kg != null && reps != null) val = kg * reps * (serie != null ? serie : 1);
+    } else {
+      val = kg;
+    }
+    if (val == null) return;
+    pts.push({ wi, label: w.label || ('W' + (wi + 1)), val, colore: log.colore || '' });
+  });
+  return { pts, total: weeks.length };
+}
+
+function fmtNum(v) {
+  return (Math.round(v * 10) / 10).toString().replace('.', ',');
+}
+
+function progChartSvg(pts, total, metric) {
+  const W = 320, H = 142, padL = 16, padR = 16, padT = 26, padB = 26;
+  const plotW = W - padL - padR, plotH = H - padT - padB, baseY = padT + plotH;
+  const vals = pts.map((p) => p.val);
+  let vmin = Math.min(...vals), vmax = Math.max(...vals);
+  if (vmin === vmax) { vmin -= 1; vmax += 1; }
+  const xOf = (wi) => padL + (total > 1 ? wi / (total - 1) : 0.5) * plotW;
+  const yOf = (v) => padT + (1 - (v - vmin) / (vmax - vmin)) * plotH;
+  const fmtV = (v) => metric === 'volume' ? Math.round(v).toLocaleString('it-IT') : fmtNum(v);
+
+  const co = pts.map((p) => ({ ...p, x: xOf(p.wi), y: yOf(p.val) }));
+  const line = co.map((c, i) => (i ? 'L' : 'M') + c.x.toFixed(1) + ' ' + c.y.toFixed(1)).join(' ');
+  const area = `M${co[0].x.toFixed(1)} ${baseY} ` + co.map((c) => `L${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' ') + ` L${co[co.length - 1].x.toFixed(1)} ${baseY} Z`;
+
+  const dots = co.map((c) => {
+    const col = SEM_COLOR[c.colore] || 'var(--accent)';
+    const ty = c.y - 9 < padT ? (c.y + 16) : (c.y - 9);
+    return `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="4.5" fill="${col}" stroke="var(--surface)" stroke-width="2"/>`
+      + `<text class="pc-val" x="${c.x.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle">${esc(fmtV(c.val))}</text>`
+      + `<text class="pc-wk" x="${c.x.toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(c.label)}</text>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" class="prog-chart" preserveAspectRatio="xMidYMid meet" role="img">`
+    + `<line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" stroke="var(--line)" stroke-width="1"/>`
+    + `<path d="${area}" fill="var(--accent)" opacity="0.08"/>`
+    + `<path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
+    + dots + `</svg>`;
+}
+
+function progCard(e, metric) {
+  const { pts, total } = exSeries(e, metric);
+  const first = pts[0].val, last = pts[pts.length - 1].val;
+  const delta = last - first;
+  const pct = first ? Math.round(delta / first * 100) : 0;
+  const unit = metric === 'volume' ? '' : ' kg';
+  const dCls = delta > 0 ? 'up' : (delta < 0 ? 'down' : 'flat');
+  const dNum = metric === 'volume' ? Math.round(delta).toLocaleString('it-IT') : fmtNum(delta);
+  const dTxt = (delta > 0 ? '+' : '') + dNum + unit + (first ? ` · ${delta > 0 ? '+' : ''}${pct}%` : '');
+  return `<article class="card pc-card">
+      <div class="pc-head"><h4>${esc(e.nome)}</h4><span class="pc-delta ${dCls}">${esc(dTxt)}</span></div>
+      ${progChartSvg(pts, total, metric)}
+    </article>`;
+}
+
+function renderProgressi(giorno) {
+  const metric = state.progMetric === 'volume' ? 'volume' : 'peso';
+  const toggle = `<div class="prog-metric">
+      <button data-metric="peso" class="${metric === 'peso' ? 'on' : ''}">Peso</button>
+      <button data-metric="volume" class="${metric === 'volume' ? 'on' : ''}">Volume</button>
+    </div>`;
+  const withData = (giorno.esercizi || []).filter((e) => exSeries(e, metric).pts.length >= 2);
+  if (!withData.length) {
+    return toggle + `<div class="pc-none">Ancora niente da graficare per questo giorno.<br>Servono i risultati di almeno 2 settimane${metric === 'volume' ? ' con serie, reps e kg' : ' con il peso'}.</div>`;
+  }
+  const intro = `<p class="pc-intro">Andamento ${metric === 'volume' ? 'del volume (serie × reps × kg)' : 'del carico (kg)'} settimana per settimana. I pallini sono colorati come il semaforo dello sforzo.</p>`;
+  return toggle + intro + withData.map((e) => progCard(e, metric)).join('');
 }
 
 /* ---------------- shell ---------------- */
