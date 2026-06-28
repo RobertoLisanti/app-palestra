@@ -729,18 +729,19 @@ function progChartSvg(pts, total, metric) {
   const line = co.map((c, i) => (i ? 'L' : 'M') + c.x.toFixed(1) + ' ' + c.y.toFixed(1)).join(' ');
   const area = `M${co[0].x.toFixed(1)} ${baseY} ` + co.map((c) => `L${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' ') + ` L${co[co.length - 1].x.toFixed(1)} ${baseY} Z`;
 
-  const dots = co.map((c) => {
+  const dots = co.map((c, i) => {
     const col = SEM_COLOR[c.colore] || 'var(--accent)';
     const ty = c.y - 9 < padT ? (c.y + 16) : (c.y - 9);
-    return `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="4.5" fill="${col}" stroke="var(--surface)" stroke-width="2"/>`
-      + `<text class="pc-val" x="${c.x.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle">${esc(fmtV(c.val))}</text>`
+    const dly = (0.18 + i * 0.09).toFixed(2);
+    return `<circle class="pc-dot" style="animation-delay:${dly}s" cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="4.5" fill="${col}" stroke="var(--surface)" stroke-width="2"/>`
+      + `<text class="pc-val" style="animation-delay:${dly}s" x="${c.x.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle">${esc(fmtV(c.val))}</text>`
       + `<text class="pc-wk" x="${c.x.toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(c.label)}</text>`;
   }).join('');
 
   return `<svg viewBox="0 0 ${W} ${H}" class="prog-chart" preserveAspectRatio="xMidYMid meet" role="img">`
     + `<line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" stroke="var(--line)" stroke-width="1"/>`
-    + `<path d="${area}" fill="var(--accent)" opacity="0.08"/>`
-    + `<path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
+    + `<path class="pc-area" d="${area}" fill="var(--accent)"/>`
+    + `<path class="pc-line" d="${line}" pathLength="1" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
     + dots + `</svg>`;
 }
 
@@ -895,11 +896,21 @@ function render() {
   else if (state.view === 'attuale') renderAttuale();
   else if (state.view === 'storico') renderStorico();
   else if (state.view === 'dettaglio') renderDetail();
+  // transizione d'entrata (ri-triggerata a ogni cambio vista)
+  viewEl.classList.remove('view-enter');
+  void viewEl.offsetWidth; // forza reflow per far ripartire l'animazione
+  viewEl.classList.add('view-enter');
 }
 
 /* ---------------- events ---------------- */
 document.querySelectorAll('.tab').forEach((t) =>
   t.addEventListener('click', () => go('#/' + t.dataset.view)));
+
+// micro-feedback aptico al tap (solo Android/dispositivi che supportano vibrate)
+function haptic(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {} }
+document.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('button, [data-go], .hist-card, .day-pill, .prog-row.editable, .tab')) haptic(7);
+}, { passive: true });
 
 // tap su una settimana (scheda attuale) -> apri inserimento dati
 viewEl.addEventListener('click', (e) => {
@@ -1943,8 +1954,14 @@ function startAccountWatch() {
 }
 
 /* ---------------- boot ---------------- */
+function skeletonView() {
+  const tile = '<div class="sk-tile"><div class="skl sk-ico"></div><div class="sk-lines"><div class="skl sk-l1"></div><div class="skl sk-l2"></div></div></div>';
+  return '<div class="sk-hero"><div class="skl sk-ey"></div><div class="skl sk-h"></div><div class="skl sk-p"></div></div>'
+    + '<div class="htiles">' + tile.repeat(5) + '</div>';
+}
+
 async function boot() {
-  viewEl.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+  viewEl.innerHTML = skeletonView();
   const ok = await loadData({ fresh: true });
   if (!ok) toast('Offline — alcuni dati potrebbero non essere aggiornati');
   route(); // mostra la pagina indicata dall'hash (default: home)
