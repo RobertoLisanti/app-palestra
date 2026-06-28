@@ -988,12 +988,6 @@ function render() {
 document.querySelectorAll('.tab').forEach((t) =>
   t.addEventListener('click', () => go('#/' + t.dataset.view)));
 
-// micro-feedback aptico al tap (solo Android/dispositivi che supportano vibrate)
-function haptic(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {} }
-document.addEventListener('pointerdown', (e) => {
-  if (e.target.closest('button, [data-go], .hist-card, .day-pill, .prog-row.editable, .tab')) haptic(7);
-}, { passive: true });
-
 // tap su una settimana (scheda attuale) -> apri inserimento dati
 viewEl.addEventListener('click', (e) => {
   const cta = e.target.closest('.empty-cta');

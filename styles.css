@@ -23,6 +23,8 @@
   --bad: #ff5d5d;
   --radius: 18px;
   --radius-sm: 12px;
+  --font-display: 'Oswald', 'Archivo Narrow', var(--font-base);
+  --font-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --shadow: 0 10px 30px rgba(0,0,0,.35);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -38,7 +40,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-base);
   font-size: 16px;
   line-height: 1.45;
   overscroll-behavior-y: none;
@@ -1026,3 +1028,19 @@ body.sheet-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .ring-fg { animation: none !important; stroke-dashoffset: var(--off) !important; }
 }
+
+/* ---- tocco finale: font display per i titoli (look atletico) ---- */
+#topTitle,
+.home-hero h2, .hh-greet h2, .hero h2,
+.eyebrow,
+.section-head h3,
+.empty-state h3,
+.pc-head h4,
+.hh-stat .n, .ring-pct, .ring-lab, .hist-badge .f {
+  font-family: var(--font-display);
+}
+/* Oswald è condensato: tolgo il tracking negativo dei titoli grandi */
+#topTitle, .home-hero h2, .hh-greet h2, .hero h2, .empty-state h3, .pc-head h4 {
+  letter-spacing: .2px; font-weight: 700;
+}
+.section-head h3, .eyebrow { letter-spacing: 1px; }
