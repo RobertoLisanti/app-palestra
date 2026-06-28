@@ -988,3 +988,41 @@ body.sheet-open { overflow: hidden; }
   .pc-area { opacity: .08 !important; }
   .pc-dot, .prog-chart .pc-val { opacity: 1 !important; }
 }
+
+/* ---- abbellimenti "medio": home viva, anello, empty state ---- */
+/* 6 · anello di completamento (stile Apple Fitness) */
+.ring { display: block; flex: none; }
+.ring-fg { stroke-dashoffset: var(--c); animation: ringDraw .9s cubic-bezier(.2,.8,.2,1) forwards; }
+@keyframes ringDraw { to { stroke-dashoffset: var(--off); } }
+.ring-pct { fill: var(--text); font-size: 19px; font-weight: 850; }
+.ring-lab { fill: var(--text); font-size: 15px; font-weight: 850; }
+.ring.sm .ring-lab { font-size: 13px; }
+
+/* 5 · home "viva": saluto + anello + statistiche */
+.home-hero.rich { background: linear-gradient(150deg, var(--surface-2), var(--surface)); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+.hh-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.hh-greet { min-width: 0; }
+.hh-greet .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--accent); }
+.hh-greet h2 { margin: 5px 0 4px; font-size: 23px; font-weight: 850; letter-spacing: -.4px; }
+.hh-greet p { margin: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hh-stats { display: flex; gap: 8px; margin-top: 16px; }
+.hh-stat { flex: 1; background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 6px; text-align: center; }
+.hh-stat .n { display: block; font-size: 18px; font-weight: 850; color: var(--text); }
+.hh-stat .l { display: block; font-size: 10px; font-weight: 700; color: var(--muted-2); text-transform: uppercase; letter-spacing: .3px; margin-top: 3px; }
+
+/* anello giorno nella scheda attuale */
+.section-head.day-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.day-head .dh-txt { min-width: 0; }
+
+/* 7 · empty state illustrati */
+.empty-state { text-align: center; padding: 52px 22px; color: var(--muted); }
+.empty-art { width: 84px; height: 84px; margin: 0 auto 16px; border-radius: 24px; display: grid; place-items: center; color: var(--accent); border: 1px solid var(--line); background: radial-gradient(120% 120% at 30% 20%, rgba(198,251,80,.16), rgba(122,240,200,.05)); }
+.empty-art svg { width: 40px; height: 40px; }
+.empty-state h3 { margin: 0 0 6px; font-size: 18px; font-weight: 800; color: var(--text); }
+.empty-state p { margin: 0 auto; max-width: 290px; font-size: 14px; line-height: 1.5; }
+.empty-cta { margin-top: 18px; padding: 11px 22px; border-radius: 999px; border: 0; font-weight: 800; font-size: 14.5px; cursor: pointer; color: var(--accent-ink); background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 8px 20px rgba(198,251,80,.22); }
+.empty-cta:active { transform: scale(.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-fg { animation: none !important; stroke-dashoffset: var(--off) !important; }
+}

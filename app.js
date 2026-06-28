@@ -86,6 +86,47 @@ function currentWeekIndex(scheda) {
   return Math.floor(days / 7); // 0-based: settimana 1 = indice 0
 }
 
+/* anello di completamento (stile Apple Fitness) */
+function ringSvg(done, total, opts = {}) {
+  const size = opts.size || 72, sw = opts.stroke || 8;
+  const pct = total > 0 ? Math.min(1, done / total) : 0;
+  const r = (size - sw) / 2, c = 2 * Math.PI * r, off = c * (1 - pct), center = (size / 2).toFixed(1);
+  const inner = opts.label != null
+    ? `<text class="ring-lab" x="${center}" y="${center}" text-anchor="middle" dominant-baseline="central">${esc(opts.label)}</text>`
+    : `<text class="ring-pct" x="${center}" y="${center}" text-anchor="middle" dominant-baseline="central">${Math.round(pct * 100)}%</text>`;
+  return `<svg class="ring ${opts.cls || ''}" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="${done} su ${total}">
+    <circle cx="${center}" cy="${center}" r="${r.toFixed(1)}" fill="none" stroke="var(--line)" stroke-width="${sw}"/>
+    <circle class="ring-fg" style="--c:${c.toFixed(1)};--off:${off.toFixed(1)}" cx="${center}" cy="${center}" r="${r.toFixed(1)}" fill="none" stroke="var(--accent)" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" transform="rotate(-90 ${center} ${center})"/>
+    ${inner}
+  </svg>`;
+}
+
+/* statistiche sintetiche della scheda corrente per la home */
+function weekStats(sch) {
+  const exs = (sch.giorni || []).flatMap((g) => g.esercizi || []);
+  const maxWeeks = Math.max(1, ...exs.map((e) => (e.settimane || []).length));
+  let cw = currentWeekIndex(sch);
+  cw = cw < 0 ? 0 : Math.min(cw, maxWeeks - 1);
+  let totalThisWeek = 0, doneThisWeek = 0;
+  exs.forEach((e) => {
+    const w = (e.settimane || [])[cw];
+    if (w) { totalThisWeek++; if (w.log) doneThisWeek++; }
+  });
+  // settimane con almeno un log registrato
+  const weekHasLog = [];
+  for (let w = 0; w < maxWeeks; w++) weekHasLog[w] = exs.some((e) => { const s = (e.settimane || [])[w]; return s && s.log; });
+  let lastLogged = -1;
+  for (let w = maxWeeks - 1; w >= 0; w--) if (weekHasLog[w]) { lastLogged = w; break; }
+  let streak = 0;
+  for (let w = lastLogged; w >= 0 && weekHasLog[w]; w--) streak++;
+  // sessioni: giornate di calendario distinte in cui si è registrato qualcosa
+  const days = new Set();
+  exs.forEach((e) => (e.settimane || []).forEach((w) => {
+    if (w.log && w.log.ts) { const d = new Date(w.log.ts); if (!isNaN(d)) days.add(d.toISOString().slice(0, 10)); }
+  }));
+  return { weekNum: cw + 1, totalWeeks: maxWeeks, doneThisWeek, totalThisWeek, streak, sessions: days.size };
+}
+
 /* ---------------- data loading (da Supabase) ---------------- */
 function rowsToData(rows) {
   const schede = rows.map((r) => ({
@@ -126,7 +167,10 @@ function renderAttuale() {
   topTitle.textContent = 'Scheda attuale';
   topSub.textContent = sch ? sch.titolo : '';
 
-  if (!sch) { viewEl.innerHTML = emptyState('Ancora nessuna scheda', 'La tua scheda comparirà qui appena viene caricata.'); return; }
+  if (!sch) {
+    viewEl.innerHTML = emptyState('Ancora nessuna scheda', 'Crea la tua prima scheda e inizia ad allenarti.', { icon: 'dumbbell', cta: { href: '#/nuova', label: 'Crea una scheda' } });
+    return;
+  }
 
   const nGiorni = sch.giorni.length;
   const nEser = sch.giorni.reduce((a, g) => a + g.esercizi.length, 0);
@@ -150,7 +194,14 @@ function renderAttuale() {
 
   const giorno = sch.giorni[state.dayIndex];
   const curWeek = currentWeekIndex(sch);
-  html += `<div class="section-head"><h3>${esc(giorno.nome)}</h3><span class="count">${giorno.esercizi.length} esercizi</span></div>`;
+  const dayExs = giorno.esercizi || [];
+  const maxW = Math.max(1, ...dayExs.map((e) => (e.settimane || []).length));
+  const cw = curWeek < 0 ? 0 : Math.min(curWeek, maxW - 1);
+  const dayDone = dayExs.filter((e) => { const w = (e.settimane || [])[cw]; return w && w.log; }).length;
+  html += `<div class="section-head day-head">
+      <div class="dh-txt"><h3>${esc(giorno.nome)}</h3><span class="count">${dayDone} di ${dayExs.length} fatti · sett. ${cw + 1}</span></div>
+      ${ringSvg(dayDone, dayExs.length, { size: 46, stroke: 6, cls: 'sm', label: dayDone + '/' + dayExs.length })}
+    </div>`;
   html += giorno.esercizi.map((e, i) => exerciseCard(e, i, curWeek, { editable: true, schedId: sch.id, dayIndex: state.dayIndex })).join('');
   html += `<div class="sch-footer">
     <div class="week-actions">
@@ -589,7 +640,10 @@ function renderStorico() {
   topTitle.textContent = 'Storico';
   topSub.textContent = state.data ? `${state.data.schede.length} schede archiviate` : '';
 
-  if (!state.data) { viewEl.innerHTML = emptyState('Storico vuoto', ''); return; }
+  if (!state.data || !state.data.schede.length) {
+    viewEl.innerHTML = emptyState('Storico vuoto', 'Qui finiranno le tue schede passate. Creane una per cominciare 💪', { icon: 'history', cta: { href: '#/nuova', label: 'Crea una scheda' } });
+    return;
+  }
 
   const schede = [...state.data.schede].reverse(); // piu' recenti in alto
   const curId = state.data.correnteId;
@@ -775,8 +829,19 @@ function renderProgressi(giorno) {
 }
 
 /* ---------------- shell ---------------- */
-function emptyState(title, sub) {
-  return `<div class="empty-state"><div class="big">🏋️</div><h3>${esc(title)}</h3><p>${esc(sub)}</p></div>`;
+const EMPTY_ART = {
+  dumbbell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m6.5 6.5 11 11"/><path d="m21 21-1-1M4 4 3 3"/><path d="m20.5 17.5-3 3M3.5 6.5l3-3M2 14l2 2 2-2-2-2zM18 6l2 2 2-2-2-2z"/></svg>',
+  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>',
+};
+function emptyState(title, sub, opts = {}) {
+  const art = EMPTY_ART[opts.icon] || EMPTY_ART.dumbbell;
+  const cta = opts.cta ? `<button class="empty-cta" data-go="${esc(opts.cta.href)}">${esc(opts.cta.label || 'Inizia')}</button>` : '';
+  return `<div class="empty-state">
+    <div class="empty-art">${art}</div>
+    <h3>${esc(title)}</h3>
+    ${sub ? `<p>${esc(sub)}</p>` : ''}
+    ${cta}
+  </div>`;
 }
 
 /* ---------------- routing (hash) ---------------- */
@@ -872,12 +937,29 @@ function renderHome() {
       ${HOME_ICONS.chev}
     </button>`;
 
-  let html = `
-    <section class="home-hero">
-      <div class="eyebrow">${owner ? 'Proprietario' : 'Bentornato'}</div>
-      <h2>Ciao, ${esc(name)} 👋</h2>
-      <p class="muted">${sch ? 'Scheda attuale: ' + esc(sch.titolo) : 'Nessuna scheda attiva al momento'}</p>
-    </section>
+  const st = sch ? weekStats(sch) : null;
+  const hero = (st && st.totalThisWeek > 0)
+    ? `<section class="home-hero rich">
+        <div class="hh-top">
+          <div class="hh-greet">
+            <div class="eyebrow">${owner ? 'Proprietario' : 'Bentornato'}</div>
+            <h2>Ciao, ${esc(name)} 👋</h2>
+            <p class="muted">Settimana ${st.weekNum} di ${st.totalWeeks} · ${esc(sch.titolo)}</p>
+          </div>
+          ${ringSvg(st.doneThisWeek, st.totalThisWeek, { size: 76, stroke: 9 })}
+        </div>
+        <div class="hh-stats">
+          <div class="hh-stat"><span class="n">${st.doneThisWeek}/${st.totalThisWeek}</span><span class="l">questa settimana</span></div>
+          <div class="hh-stat"><span class="n">🔥 ${st.streak}</span><span class="l">settimane di fila</span></div>
+          <div class="hh-stat"><span class="n">${st.sessions}</span><span class="l">sessioni totali</span></div>
+        </div>
+      </section>`
+    : `<section class="home-hero">
+        <div class="eyebrow">${owner ? 'Proprietario' : 'Bentornato'}</div>
+        <h2>Ciao, ${esc(name)} 👋</h2>
+        <p class="muted">${sch ? 'Scheda attuale: ' + esc(sch.titolo) : 'Nessuna scheda attiva al momento'}</p>
+      </section>`;
+  let html = hero + `
     <div class="htiles">
       ${tile('#/attuale', HOME_ICONS.dumbbell, 'Scheda attuale', sch ? sch.titolo : 'Nessuna scheda', 'accent')}
       ${tile('#/nuova', HOME_ICONS.plus, 'Crea scheda', 'Archivia l\'attuale e creane una nuova')}
@@ -914,6 +996,8 @@ document.addEventListener('pointerdown', (e) => {
 
 // tap su una settimana (scheda attuale) -> apri inserimento dati
 viewEl.addEventListener('click', (e) => {
+  const cta = e.target.closest('.empty-cta');
+  if (cta && cta.dataset.go) { go(cta.dataset.go); return; }
   const restBtn = e.target.closest('.ex-rest-btn');
   if (restBtn) { openRestModal(restBtn.dataset.restSch, +restBtn.dataset.restDay, +restBtn.dataset.restEx); return; }
   const row = e.target.closest('.prog-row.editable');
