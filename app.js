@@ -7,6 +7,10 @@
 
 const CACHE_KEY = 'palestra.data';
 
+// Grafici progressi nello storico: codice pronto ma NON ancora esposto agli utenti.
+// Roberto li testerà con dati reali ~metà luglio 2026; per accenderli: mettere a true e deploy.
+const PROGRESS_CHARTS_ENABLED = false;
+
 const state = {
   data: null,
   view: 'attuale',      // 'attuale' | 'storico' | 'dettaglio'
@@ -698,11 +702,13 @@ function renderDetail() {
       </div>
     </section>`;
 
-  const tab = state.detailTab === 'progressi' ? 'progressi' : 'scheda';
-  html += `<div class="detail-tabs">
-      <button data-tab="scheda" class="${tab === 'scheda' ? 'on' : ''}">Scheda</button>
-      <button data-tab="progressi" class="${tab === 'progressi' ? 'on' : ''}">📈 Progressi</button>
-    </div>`;
+  const tab = (PROGRESS_CHARTS_ENABLED && state.detailTab === 'progressi') ? 'progressi' : 'scheda';
+  if (PROGRESS_CHARTS_ENABLED) {
+    html += `<div class="detail-tabs">
+        <button data-tab="scheda" class="${tab === 'scheda' ? 'on' : ''}">Scheda</button>
+        <button data-tab="progressi" class="${tab === 'progressi' ? 'on' : ''}">📈 Progressi</button>
+      </div>`;
+  }
 
   html += `<div class="days">` + sch.giorni.map((g, i) => `
     <button class="day-pill ${i === state.dayIndex ? 'is-active' : ''}" data-day="${i}">
