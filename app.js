@@ -904,6 +904,21 @@ function route() {
     if (overlayKey !== 'admin') { overlayKey = 'admin'; showOverlay(buildAdmin()); }
     return;
   }
+  if (r.name === 'segnala') {
+    if (owner) { go('#/home'); return; } // l'owner non segnala a se stesso
+    if (overlayKey !== 'segnala') { overlayKey = 'segnala'; showOverlay(buildSegnala()); }
+    return;
+  }
+  if (r.name === 'supporto') {
+    if (!owner) { go('#/home'); return; }
+    if (r.a === 'problema' && r.b) {
+      const key = 'supporto/problema/' + r.b;
+      if (overlayKey !== key) { overlayKey = key; openSupportDetailRoute(r.b); }
+      return;
+    }
+    if (overlayKey !== 'supporto') { overlayKey = 'supporto'; showOverlay(buildSupport()); }
+    return;
+  }
 
   // --- rotte principali (dentro la shell) ---
   if (overlayKey) clearOverlay();
@@ -925,6 +940,8 @@ const HOME_ICONS = {
   users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18M12 14v4M10 16h4"/></svg>',
   chev: '<svg class="htile-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+  help: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h0"/></svg>',
+  support: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
 };
 
 function renderHome() {
@@ -972,9 +989,19 @@ function renderHome() {
       ${tile('#/storico', HOME_ICONS.history, 'Storico', nSchede ? nSchede + ' schede archiviate' : 'Le tue schede passate')}
       ${tile('#/profilo', HOME_ICONS.user, 'Il mio profilo', 'Anagrafica e dati personali')}
       ${owner ? tile('#/admin', HOME_ICONS.users, 'Gestione utenti', 'Dashboard, approvazioni, anagrafiche', 'owner') : ''}
+      ${owner
+        ? tile('#/supporto', HOME_ICONS.support, 'Supporto', 'Problemi segnalati dagli utenti', 'owner')
+        : tile('#/segnala', HOME_ICONS.help, 'Segnala un problema', 'Un bug o un intoppo? Scrivici')}
     </div>`;
   viewEl.innerHTML = html;
   viewEl.querySelectorAll('.htile').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
+  // conteggio problemi aperti nella tile Supporto (solo owner)
+  if (owner) refreshSupportBadge().then(() => {
+    const el = viewEl.querySelector('[data-go="#/supporto"] .htile-s');
+    if (el) el.textContent = OPEN_REPORTS
+      ? OPEN_REPORTS + (OPEN_REPORTS === 1 ? ' problema da gestire' : ' problemi da gestire')
+      : 'Nessun problema aperto';
+  });
 }
 
 function render() {
@@ -1046,6 +1073,7 @@ function accountMenuMarkup(user) {
       ${navItem('#/nuova', 'Crea scheda')}
       ${navItem('#/profilo', 'Il mio profilo')}
       ${isOwner ? navItem('#/admin', 'Gestione utenti') : ''}
+      ${isOwner ? navItem('#/supporto', 'Supporto') : navItem('#/segnala', 'Segnala un problema')}
       ${isOwner ? '<button class="account-action" data-acc="push">Attiva notifiche</button>' : ''}
       <button class="account-logout" data-acc="logout">Esci</button>
     </div>`;
@@ -1913,6 +1941,278 @@ function buildAdmin() {
   });
 
   load();
+  return m;
+}
+
+/* ---------------- supporto / segnalazioni ---------------- */
+let OPEN_REPORTS = 0;       // problemi aperti (badge owner)
+let SUPPORT_CACHE = [];     // ultima lista caricata (per il dettaglio)
+
+const BACK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+
+async function refreshSupportBadge() {
+  if (!window.PALESTRA_USER || window.PALESTRA_USER.role !== 'owner') return;
+  try {
+    const { count } = await window.sb.from('segnalazioni')
+      .select('*', { count: 'exact', head: true }).eq('stato', 'aperto');
+    OPEN_REPORTS = count || 0;
+  } catch (_) {}
+}
+
+/* --- lato utente: invio segnalazione --- */
+function buildSegnala() {
+  const u = window.PALESTRA_USER || {};
+  const m = document.createElement('div');
+  m.className = 'admin-screen';
+  m.innerHTML = `
+    <div class="admin-bar">
+      <div class="admin-bar-left">
+        <button class="icon-btn" id="sgBack" aria-label="Chiudi">${BACK_SVG}</button>
+        <div>
+          <h2>Segnala un problema</h2>
+          <div class="sub">Ti rispondiamo il prima possibile</div>
+        </div>
+      </div>
+      <div class="bar-right"><div class="account-slot acc-overlay">${accountMenuMarkup(u)}</div></div>
+    </div>
+    <div class="admin-scroll">
+      <div class="sg-wrap">
+        <div class="sg-intro">Descrivi il problema o l'intoppo che hai avuto: <b>cosa stavi facendo</b>, <b>cosa è successo</b> e su quale pagina. Più dettagli ci dai, prima lo risolviamo.</div>
+        <label class="field-sm sg-field"><span>Il tuo messaggio</span>
+          <textarea id="sgTesto" rows="6" placeholder="Es. Quando salvo il risultato del 2° esercizio l'app si blocca…"></textarea></label>
+        <div class="sg-actions">
+          <button class="btn-primary" id="sgSend"><span class="lbl">Invia segnalazione</span><span class="spin-dot" hidden></span></button>
+        </div>
+        <div class="sg-mine">
+          <div class="sg-mine-hd">Le tue segnalazioni</div>
+          <div id="sgList"><div class="admin-empty">Caricamento…</div></div>
+        </div>
+      </div>
+    </div>`;
+  wireAccountMenu(m.querySelector('.acc-overlay'));
+  m.querySelector('#sgBack').addEventListener('click', () => go('#/home'));
+
+  const txt = m.querySelector('#sgTesto');
+  const btn = m.querySelector('#sgSend');
+  const listEl = m.querySelector('#sgList');
+
+  async function loadMine() {
+    try {
+      const { data, error } = await window.sb.from('segnalazioni')
+        .select('id,testo,stato,created_at,risolto_at')
+        .eq('user_id', u.id).order('created_at', { ascending: false });
+      if (error) throw error;
+      const rows = data || [];
+      if (!rows.length) { listEl.innerHTML = `<div class="admin-empty">Non hai ancora inviato segnalazioni.</div>`; return; }
+      listEl.innerHTML = rows.map((s) => {
+        const aperto = s.stato !== 'risolto';
+        return `<div class="sg-item ${aperto ? 'open' : 'done'}">
+          <div class="sg-item-top">
+            <span class="sup-badge ${aperto ? 'b-open' : 'b-done'}">${aperto ? 'In lavorazione' : 'Risolto'}</span>
+            <span class="sg-item-date">${esc(fmtTs(s.created_at))}</span>
+          </div>
+          <div class="sg-item-txt">${esc(s.testo || '')}</div>
+        </div>`;
+      }).join('');
+    } catch (_) {
+      listEl.innerHTML = `<div class="admin-empty">Impossibile caricare le tue segnalazioni.</div>`;
+    }
+  }
+
+  btn.addEventListener('click', async () => {
+    const testo = (txt.value || '').trim();
+    if (testo.length < 5) { toast('Scrivi qualche dettaglio in più'); txt.focus(); return; }
+    btn.disabled = true; btn.querySelector('.lbl').textContent = 'Invio…';
+    try {
+      const { error } = await window.sb.from('segnalazioni').insert({
+        user_id: u.id,
+        username: u.username || null,
+        nome: u.nome || null,
+        testo,
+      });
+      if (error) throw error;
+      txt.value = '';
+      toast('Segnalazione inviata ✓ grazie!');
+      await loadMine();
+    } catch (err) {
+      toast('Invio non riuscito (sei offline?)');
+    } finally {
+      btn.disabled = false; btn.querySelector('.lbl').textContent = 'Invia segnalazione';
+    }
+  });
+
+  loadMine();
+  return m;
+}
+
+/* --- lato owner: dashboard supporto --- */
+function supportRow(s) {
+  const aperto = s.stato !== 'risolto';
+  const who = s.nome || (s.username ? '@' + s.username : 'Utente');
+  const when = fmtTs(s.created_at);
+  const snip = (s.testo || '').replace(/\s+/g, ' ').trim();
+  const short = snip.length > 130 ? snip.slice(0, 130) + '…' : snip;
+  return `<button class="sup-row ${aperto ? 'open' : 'done'}" data-id="${esc(s.id)}">
+    <div class="sup-main">
+      <div class="sup-top"><span class="sup-who">${esc(who)}</span><span class="sup-when">${esc(when)}</span></div>
+      <div class="sup-snip">${esc(short)}</div>
+    </div>
+    <span class="sup-badge ${aperto ? 'b-open' : 'b-done'}">${aperto ? 'Aperto' : 'Risolto'}</span>
+  </button>`;
+}
+
+function buildSupport() {
+  const m = document.createElement('div');
+  m.className = 'admin-screen';
+  m.innerHTML = `
+    <div class="admin-bar">
+      <div class="admin-bar-left">
+        <button class="icon-btn" id="supBack" aria-label="Chiudi">${BACK_SVG}</button>
+        <div>
+          <h2>Supporto</h2>
+          <div class="sub" id="supSub">Caricamento…</div>
+        </div>
+      </div>
+      <div class="bar-right">
+        <button class="icon-btn" id="supRefresh" aria-label="Aggiorna">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        </button>
+        <div class="account-slot acc-overlay">${accountMenuMarkup(window.PALESTRA_USER)}</div>
+      </div>
+    </div>
+    <div class="admin-scroll">
+      <div class="admin-wrap">
+        <div class="admin-kpis" id="supKpis"></div>
+        <div id="supResult"><div class="admin-empty">Caricamento…</div></div>
+      </div>
+    </div>`;
+  let all = [], filter = 'aperto';
+  const subEl = m.querySelector('#supSub');
+  const kpisEl = m.querySelector('#supKpis');
+  const resultEl = m.querySelector('#supResult');
+
+  wireAccountMenu(m.querySelector('.acc-overlay'));
+  m.querySelector('#supBack').addEventListener('click', () => go('#/home'));
+
+  function counts() {
+    const aperti = all.filter((s) => s.stato !== 'risolto').length;
+    return { aperti, risolti: all.length - aperti, tot: all.length };
+  }
+  function renderKpis() {
+    const c = counts();
+    subEl.textContent = c.aperti + (c.aperti === 1 ? ' problema aperto' : ' problemi aperti');
+    kpisEl.innerHTML = `
+      <button class="kpi kpi-pending ${filter === 'aperto' ? 'on' : ''}" data-f="aperto"><span class="kpi-n">${c.aperti}</span><span class="kpi-l">Aperti</span></button>
+      <button class="kpi kpi-approved ${filter === 'risolto' ? 'on' : ''}" data-f="risolto"><span class="kpi-n">${c.risolti}</span><span class="kpi-l">Risolti</span></button>
+      <button class="kpi ${filter === 'all' ? 'on' : ''}" data-f="all"><span class="kpi-n">${c.tot}</span><span class="kpi-l">Tutti</span></button>`;
+  }
+  function renderList() {
+    let list = filter === 'all' ? all : all.filter((s) => (filter === 'aperto' ? s.stato !== 'risolto' : s.stato === 'risolto'));
+    list = list.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    if (!list.length) {
+      const msg = filter === 'aperto' ? 'Nessun problema aperto. Tutto sotto controllo 👍'
+        : filter === 'risolto' ? 'Nessun problema risolto in archivio.' : 'Nessuna segnalazione ricevuta.';
+      resultEl.innerHTML = `<div class="admin-empty">${msg}</div>`;
+      return;
+    }
+    resultEl.innerHTML = `<div class="sup-list">${list.map(supportRow).join('')}</div>`;
+  }
+  function setFilter(f) { filter = f; renderKpis(); renderList(); }
+
+  kpisEl.addEventListener('click', (e) => { const b = e.target.closest('.kpi'); if (b) setFilter(b.dataset.f); });
+  resultEl.addEventListener('click', (e) => { const r = e.target.closest('.sup-row'); if (r) go('#/supporto/problema/' + r.dataset.id); });
+
+  async function load() {
+    try {
+      const { data, error } = await window.sb.from('segnalazioni').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      all = data || [];
+      SUPPORT_CACHE = all;
+      OPEN_REPORTS = all.filter((s) => s.stato !== 'risolto').length;
+      renderKpis();
+      renderList();
+    } catch (err) {
+      subEl.textContent = 'Errore di caricamento';
+      resultEl.innerHTML = `<div class="admin-err">${esc(err.message || 'Errore di caricamento')}</div>`;
+    }
+  }
+  const refreshBtn = m.querySelector('#supRefresh');
+  refreshBtn.addEventListener('click', async () => { refreshBtn.classList.add('spin'); await load(); refreshBtn.classList.remove('spin'); });
+
+  load();
+  return m;
+}
+
+async function openSupportDetailRoute(id) {
+  let s = SUPPORT_CACHE.find((x) => x.id === id);
+  if (!s) {
+    try { const { data } = await window.sb.from('segnalazioni').select('*').eq('id', id).maybeSingle(); s = data || null; } catch (_) {}
+  }
+  if (!s) { go('#/supporto'); return; }
+  showOverlay(buildSupportDetail(s));
+}
+
+function buildSupportDetail(s) {
+  const aperto = s.stato !== 'risolto';
+  const who = s.nome || (s.username ? '@' + s.username : 'Utente');
+  const m = document.createElement('div');
+  m.className = 'admin-screen';
+  m.innerHTML = `
+    <div class="admin-bar">
+      <div class="admin-bar-left">
+        <button class="icon-btn" id="sdBack" aria-label="Indietro">${BACK_SVG}</button>
+        <div>
+          <h2>Segnalazione</h2>
+          <div class="sub">${esc(who)}</div>
+        </div>
+      </div>
+      <div class="bar-right"><div class="account-slot acc-overlay">${accountMenuMarkup(window.PALESTRA_USER)}</div></div>
+    </div>
+    <div class="admin-scroll">
+      <div class="udetail-wrap">
+        <div class="sd-head">
+          <span class="sup-badge ${aperto ? 'b-open' : 'b-done'}">${aperto ? 'Aperto' : 'Risolto'}</span>
+        </div>
+        <div class="ud-card"><h4>Dettagli</h4>${adminDetailRows([
+          ['Da', who],
+          ['Username', s.username ? '@' + s.username : '—'],
+          ['Inviata il', fmtTs(s.created_at)],
+          ['Risolta il', s.risolto_at ? fmtTs(s.risolto_at) : '—'],
+        ])}</div>
+        <div class="ud-card"><h4>Messaggio</h4><div class="sd-msg">${esc(s.testo || '')}</div></div>
+        <div class="sd-actions">
+          ${aperto
+            ? '<button class="btn-primary" id="sdResolve"><span class="lbl">Segna come risolto</span></button>'
+            : '<button class="btn-ghost" id="sdReopen">Riapri segnalazione</button>'}
+        </div>
+      </div>
+    </div>`;
+  wireAccountMenu(m.querySelector('.acc-overlay'));
+  m.querySelector('#sdBack').addEventListener('click', () => go('#/supporto'));
+
+  async function setStato(stato, okMsg, btn) {
+    if (btn) btn.disabled = true;
+    try {
+      const patch = stato === 'risolto'
+        ? { stato: 'risolto', risolto_at: new Date().toISOString() }
+        : { stato: 'aperto', risolto_at: null };
+      const { error } = await window.sb.from('segnalazioni').update(patch).eq('id', s.id);
+      if (error) throw error;
+      // aggiorna la cache locale così la lista riflette subito il cambiamento
+      const cached = SUPPORT_CACHE.find((x) => x.id === s.id);
+      if (cached) Object.assign(cached, patch);
+      toast(okMsg);
+      go('#/supporto');
+    } catch (err) {
+      if (btn) btn.disabled = false;
+      toast('Operazione non riuscita (sei offline?)');
+    }
+  }
+  const rb = m.querySelector('#sdResolve');
+  if (rb) rb.addEventListener('click', () => setStato('risolto', 'Segnato come risolto ✓', rb));
+  const ro = m.querySelector('#sdReopen');
+  if (ro) ro.addEventListener('click', () => setStato('aperto', 'Segnalazione riaperta', ro));
+
   return m;
 }
 
