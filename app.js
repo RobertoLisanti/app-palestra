@@ -1073,7 +1073,7 @@ function accountMenuMarkup(user) {
       ${navItem('#/nuova', 'Crea scheda')}
       ${navItem('#/profilo', 'Il mio profilo')}
       ${isOwner ? navItem('#/admin', 'Gestione utenti') : ''}
-      ${isOwner ? navItem('#/supporto', 'Supporto') : navItem('#/segnala', 'Segnala un problema')}
+      ${isOwner ? navItem('#/supporto', 'Supporto' + (OPEN_REPORTS > 0 ? ' · ' + OPEN_REPORTS : '')) : navItem('#/segnala', 'Segnala un problema')}
       ${isOwner ? '<button class="account-action" data-acc="push">Attiva notifiche</button>' : ''}
       <button class="account-logout" data-acc="logout">Esci</button>
     </div>`;
@@ -1945,25 +1945,97 @@ function buildAdmin() {
 }
 
 /* ---------------- supporto / segnalazioni ---------------- */
-let OPEN_REPORTS = 0;       // problemi aperti (badge owner)
+let OPEN_REPORTS = 0;       // problemi non risolti (badge owner)
 let SUPPORT_CACHE = [];     // ultima lista caricata (per il dettaglio)
+const APP_VER = 'v36';      // versione asset, allegata al contesto tecnico
+const MAX_OPEN_SEGN = 6;    // anti-spam: max segnalazioni aperte per utente
 
 const BACK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+
+const CAT_META = {
+  bug: { lbl: 'Bug', cls: 'cat-bug' },
+  scheda: { lbl: 'Problema scheda', cls: 'cat-scheda' },
+  suggerimento: { lbl: 'Suggerimento', cls: 'cat-idea' },
+  domanda: { lbl: 'Domanda', cls: 'cat-ask' },
+  altro: { lbl: 'Altro', cls: 'cat-altro' },
+};
+const catMeta = (c) => CAT_META[c] || CAT_META.altro;
+const SUP_STATUS = {
+  aperto: { lbl: 'Aperto', badge: 'b-open', row: 'open' },
+  in_lavorazione: { lbl: 'In lavorazione', badge: 'b-prog', row: 'prog' },
+  risolto: { lbl: 'Risolto', badge: 'b-done', row: 'done' },
+};
+const supStatus = (s) => SUP_STATUS[s] || SUP_STATUS.aperto;
+const refCode = (id) => '#' + String(id || '').replace(/-/g, '').slice(0, 4).toUpperCase();
+
+function relTime(iso) {
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return '';
+  const min = Math.round((Date.now() - t) / 60000);
+  if (min < 1) return 'adesso';
+  if (min < 60) return min + ' min fa';
+  const h = Math.round(min / 60);
+  if (h < 24) return h + (h === 1 ? ' ora fa' : ' ore fa');
+  const g = Math.round(h / 24);
+  if (g < 7) return g + (g === 1 ? ' giorno fa' : ' giorni fa');
+  return fmtTs(iso);
+}
+
+// contesto tecnico allegato in automatico a ogni segnalazione (l'utente non scrive nulla)
+function captureContext() {
+  try {
+    return {
+      v: APP_VER,
+      pagina: location.hash || '#/',
+      schermo: (window.innerWidth || 0) + '×' + (window.innerHeight || 0),
+      standalone: isStandalone(),
+      online: navigator.onLine,
+      lingua: navigator.language || '',
+      ua: (navigator.userAgent || '').slice(0, 300),
+      ts: new Date().toISOString(),
+    };
+  } catch (_) { return {}; }
+}
 
 async function refreshSupportBadge() {
   if (!window.PALESTRA_USER || window.PALESTRA_USER.role !== 'owner') return;
   try {
     const { count } = await window.sb.from('segnalazioni')
-      .select('*', { count: 'exact', head: true }).eq('stato', 'aperto');
+      .select('*', { count: 'exact', head: true }).neq('stato', 'risolto');
     OPEN_REPORTS = count || 0;
   } catch (_) {}
 }
 
-/* --- lato utente: invio segnalazione --- */
+// thread di conversazione (primo messaggio = testo della segnalazione, dell'utente)
+function supThread(s, msgs, viewerIsOwner) {
+  const reporter = s.nome || (s.username ? '@' + s.username : 'Utente');
+  const arr = [{ da_owner: false, testo: s.testo, created_at: s.created_at }].concat(msgs || []);
+  return `<div class="sup-thread">` + arr.map((it) => {
+    const mine = viewerIsOwner ? it.da_owner : !it.da_owner;
+    const author = it.da_owner ? (viewerIsOwner ? 'Tu' : 'Supporto') : (viewerIsOwner ? reporter : 'Tu');
+    return `<div class="msg ${mine ? 'me' : 'them'}">
+      <div class="msg-bubble">${esc(it.testo || '')}</div>
+      <div class="msg-meta">${esc(author)} · ${esc(relTime(it.created_at))}</div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+// recupera i messaggi (conversazione) per un insieme di segnalazioni
+async function fetchMessaggi(ids) {
+  if (!ids || !ids.length) return {};
+  const { data } = await window.sb.from('segnalazioni_messaggi')
+    .select('*').in('segnalazione_id', ids).order('created_at', { ascending: true });
+  const by = {};
+  (data || []).forEach((mm) => { (by[mm.segnalazione_id] = by[mm.segnalazione_id] || []).push(mm); });
+  return by;
+}
+
+/* --- lato utente: invio segnalazione + conversazione --- */
 function buildSegnala() {
   const u = window.PALESTRA_USER || {};
   const m = document.createElement('div');
   m.className = 'admin-screen';
+  const catOpts = Object.keys(CAT_META).map((k) => `<option value="${k}">${esc(CAT_META[k].lbl)}</option>`).join('');
   m.innerHTML = `
     <div class="admin-bar">
       <div class="admin-bar-left">
@@ -1978,8 +2050,11 @@ function buildSegnala() {
     <div class="admin-scroll">
       <div class="sg-wrap">
         <div class="sg-intro">Descrivi il problema o l'intoppo che hai avuto: <b>cosa stavi facendo</b>, <b>cosa è successo</b> e su quale pagina. Più dettagli ci dai, prima lo risolviamo.</div>
+        <label class="field-sm"><span>Tipo di segnalazione</span>
+          <select id="sgCat">${catOpts}</select></label>
         <label class="field-sm sg-field"><span>Il tuo messaggio</span>
-          <textarea id="sgTesto" rows="6" placeholder="Es. Quando salvo il risultato del 2° esercizio l'app si blocca…"></textarea></label>
+          <textarea id="sgTesto" rows="6" maxlength="2000" placeholder="Es. Quando salvo il risultato del 2° esercizio l'app si blocca…"></textarea></label>
+        <div class="sg-count"><span id="sgCount">0</span>/2000</div>
         <div class="sg-actions">
           <button class="btn-primary" id="sgSend"><span class="lbl">Invia segnalazione</span><span class="spin-dot" hidden></span></button>
         </div>
@@ -1993,25 +2068,39 @@ function buildSegnala() {
   m.querySelector('#sgBack').addEventListener('click', () => go('#/home'));
 
   const txt = m.querySelector('#sgTesto');
+  const cat = m.querySelector('#sgCat');
   const btn = m.querySelector('#sgSend');
   const listEl = m.querySelector('#sgList');
+  const countEl = m.querySelector('#sgCount');
+  let myOpen = 0;
+
+  txt.addEventListener('input', () => { countEl.textContent = String(txt.value.length); });
 
   async function loadMine() {
     try {
       const { data, error } = await window.sb.from('segnalazioni')
-        .select('id,testo,stato,created_at,risolto_at')
+        .select('id,testo,stato,categoria,created_at,updated_at,risolto_at')
         .eq('user_id', u.id).order('created_at', { ascending: false });
       if (error) throw error;
       const rows = data || [];
+      myOpen = rows.filter((s) => s.stato !== 'risolto').length;
       if (!rows.length) { listEl.innerHTML = `<div class="admin-empty">Non hai ancora inviato segnalazioni.</div>`; return; }
+      const byReport = await fetchMessaggi(rows.map((r) => r.id));
       listEl.innerHTML = rows.map((s) => {
-        const aperto = s.stato !== 'risolto';
-        return `<div class="sg-item ${aperto ? 'open' : 'done'}">
-          <div class="sg-item-top">
-            <span class="sup-badge ${aperto ? 'b-open' : 'b-done'}">${aperto ? 'In lavorazione' : 'Risolto'}</span>
-            <span class="sg-item-date">${esc(fmtTs(s.created_at))}</span>
+        const st = supStatus(s.stato), cm = catMeta(s.categoria);
+        const canReply = s.stato !== 'risolto';
+        return `<div class="sg-card" data-rid="${esc(s.id)}">
+          <div class="sg-card-hd">
+            <span class="sup-ref">${esc(refCode(s.id))}</span>
+            <span class="cat-chip ${cm.cls}">${esc(cm.lbl)}</span>
+            <span class="sup-badge ${st.badge}">${esc(st.lbl)}</span>
+            <span class="sg-card-date">${esc(relTime(s.created_at))}</span>
           </div>
-          <div class="sg-item-txt">${esc(s.testo || '')}</div>
+          ${supThread(s, byReport[s.id], false)}
+          ${canReply ? `<div class="sg-reply">
+            <textarea class="sg-reply-input" rows="2" maxlength="2000" placeholder="Aggiungi un dettaglio o rispondi…"></textarea>
+            <button class="btn-ghost btn-sm sg-reply-send" data-rid="${esc(s.id)}">Invia</button>
+          </div>` : ''}
         </div>`;
       }).join('');
     } catch (_) {
@@ -2019,19 +2108,41 @@ function buildSegnala() {
     }
   }
 
+  // risposte dell'utente dentro un thread esistente
+  listEl.addEventListener('click', async (e) => {
+    const b = e.target.closest('.sg-reply-send');
+    if (!b) return;
+    const card = b.closest('.sg-card');
+    const inp = card && card.querySelector('.sg-reply-input');
+    const testo = (inp && inp.value || '').trim();
+    if (testo.length < 2) { toast('Scrivi un messaggio'); return; }
+    b.disabled = true;
+    try {
+      const { error } = await window.sb.from('segnalazioni_messaggi').insert({
+        segnalazione_id: b.dataset.rid, autore_id: u.id, da_owner: false, testo,
+      });
+      if (error) throw error;
+      toast('Risposta inviata ✓');
+      await loadMine();
+    } catch (_) { b.disabled = false; toast('Invio non riuscito (sei offline?)'); }
+  });
+
   btn.addEventListener('click', async () => {
     const testo = (txt.value || '').trim();
     if (testo.length < 5) { toast('Scrivi qualche dettaglio in più'); txt.focus(); return; }
+    if (myOpen >= MAX_OPEN_SEGN) { toast('Hai troppe segnalazioni aperte: aspetta una risposta prima di inviarne altre'); return; }
     btn.disabled = true; btn.querySelector('.lbl').textContent = 'Invio…';
     try {
       const { error } = await window.sb.from('segnalazioni').insert({
         user_id: u.id,
         username: u.username || null,
         nome: u.nome || null,
+        categoria: cat.value || 'altro',
         testo,
+        contesto: captureContext(),
       });
       if (error) throw error;
-      txt.value = '';
+      txt.value = ''; countEl.textContent = '0';
       toast('Segnalazione inviata ✓ grazie!');
       await loadMine();
     } catch (err) {
@@ -2047,23 +2158,31 @@ function buildSegnala() {
 
 /* --- lato owner: dashboard supporto --- */
 function supportRow(s) {
-  const aperto = s.stato !== 'risolto';
+  const st = supStatus(s.stato), cm = catMeta(s.categoria);
   const who = s.nome || (s.username ? '@' + s.username : 'Utente');
-  const when = fmtTs(s.created_at);
   const snip = (s.testo || '').replace(/\s+/g, ' ').trim();
-  const short = snip.length > 130 ? snip.slice(0, 130) + '…' : snip;
-  return `<button class="sup-row ${aperto ? 'open' : 'done'}" data-id="${esc(s.id)}">
+  const short = snip.length > 120 ? snip.slice(0, 120) + '…' : snip;
+  const isNew = s.nuova_attivita && s.stato !== 'risolto';
+  return `<button class="sup-row ${st.row}${isNew ? ' is-new' : ''}" data-id="${esc(s.id)}">
     <div class="sup-main">
-      <div class="sup-top"><span class="sup-who">${esc(who)}</span><span class="sup-when">${esc(when)}</span></div>
+      <div class="sup-top">
+        ${isNew ? '<span class="sup-dot" title="Nuovo"></span>' : ''}
+        <span class="sup-ref">${esc(refCode(s.id))}</span>
+        <span class="sup-who">${esc(who)}</span>
+        <span class="cat-chip ${cm.cls}">${esc(cm.lbl)}</span>
+        <span class="sup-when">${esc(relTime(s.created_at))}</span>
+      </div>
       <div class="sup-snip">${esc(short)}</div>
     </div>
-    <span class="sup-badge ${aperto ? 'b-open' : 'b-done'}">${aperto ? 'Aperto' : 'Risolto'}</span>
+    <span class="sup-badge ${st.badge}">${esc(st.lbl)}</span>
   </button>`;
 }
 
 function buildSupport() {
   const m = document.createElement('div');
   m.className = 'admin-screen';
+  const catFilterOpts = '<option value="all">Tutte le categorie</option>' +
+    Object.keys(CAT_META).map((k) => `<option value="${k}">${esc(CAT_META[k].lbl)}</option>`).join('');
   m.innerHTML = `
     <div class="admin-bar">
       <div class="admin-bar-left">
@@ -2083,13 +2202,15 @@ function buildSupport() {
     <div class="admin-scroll">
       <div class="admin-wrap">
         <div class="admin-kpis" id="supKpis"></div>
+        <div class="sup-tools"><select id="supCat">${catFilterOpts}</select></div>
         <div id="supResult"><div class="admin-empty">Caricamento…</div></div>
       </div>
     </div>`;
-  let all = [], filter = 'aperto';
+  let all = [], filter = 'aperto', catf = 'all';
   const subEl = m.querySelector('#supSub');
   const kpisEl = m.querySelector('#supKpis');
   const resultEl = m.querySelector('#supResult');
+  const catSel = m.querySelector('#supCat');
 
   wireAccountMenu(m.querySelector('.acc-overlay'));
   m.querySelector('#supBack').addEventListener('click', () => go('#/home'));
@@ -2108,6 +2229,7 @@ function buildSupport() {
   }
   function renderList() {
     let list = filter === 'all' ? all : all.filter((s) => (filter === 'aperto' ? s.stato !== 'risolto' : s.stato === 'risolto'));
+    if (catf !== 'all') list = list.filter((s) => (s.categoria || 'altro') === catf);
     list = list.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     if (!list.length) {
       const msg = filter === 'aperto' ? 'Nessun problema aperto. Tutto sotto controllo 👍'
@@ -2120,6 +2242,7 @@ function buildSupport() {
   function setFilter(f) { filter = f; renderKpis(); renderList(); }
 
   kpisEl.addEventListener('click', (e) => { const b = e.target.closest('.kpi'); if (b) setFilter(b.dataset.f); });
+  catSel.addEventListener('change', () => { catf = catSel.value; renderList(); });
   resultEl.addEventListener('click', (e) => { const r = e.target.closest('.sup-row'); if (r) go('#/supporto/problema/' + r.dataset.id); });
 
   async function load() {
@@ -2149,12 +2272,17 @@ async function openSupportDetailRoute(id) {
     try { const { data } = await window.sb.from('segnalazioni').select('*').eq('id', id).maybeSingle(); s = data || null; } catch (_) {}
   }
   if (!s) { go('#/supporto'); return; }
+  // l'owner ha visto la segnalazione: azzera "nuova attività"
+  if (s.nuova_attivita) {
+    try { await window.sb.from('segnalazioni').update({ nuova_attivita: false }).eq('id', s.id); s.nuova_attivita = false; } catch (_) {}
+  }
   showOverlay(buildSupportDetail(s));
 }
 
 function buildSupportDetail(s) {
-  const aperto = s.stato !== 'risolto';
   const who = s.nome || (s.username ? '@' + s.username : 'Utente');
+  const ctx = s.contesto || {};
+  let msgs = [];
   const m = document.createElement('div');
   m.className = 'admin-screen';
   m.innerHTML = `
@@ -2162,7 +2290,7 @@ function buildSupportDetail(s) {
       <div class="admin-bar-left">
         <button class="icon-btn" id="sdBack" aria-label="Indietro">${BACK_SVG}</button>
         <div>
-          <h2>Segnalazione</h2>
+          <h2>Segnalazione ${esc(refCode(s.id))}</h2>
           <div class="sub">${esc(who)}</div>
         </div>
       </div>
@@ -2170,49 +2298,96 @@ function buildSupportDetail(s) {
     </div>
     <div class="admin-scroll">
       <div class="udetail-wrap">
-        <div class="sd-head">
-          <span class="sup-badge ${aperto ? 'b-open' : 'b-done'}">${aperto ? 'Aperto' : 'Risolto'}</span>
-        </div>
-        <div class="ud-card"><h4>Dettagli</h4>${adminDetailRows([
-          ['Da', who],
-          ['Username', s.username ? '@' + s.username : '—'],
-          ['Inviata il', fmtTs(s.created_at)],
-          ['Risolta il', s.risolto_at ? fmtTs(s.risolto_at) : '—'],
+        <div class="sd-head" id="sdHead"></div>
+        <div class="ud-card"><h4>Dettagli</h4><div id="sdDetails"></div></div>
+        <div class="ud-card ctx-card"><h4>Contesto tecnico</h4>${adminDetailRows([
+          ['Versione app', ctx.v],
+          ['Pagina', ctx.pagina],
+          ['Dispositivo', ctx.standalone ? 'App installata' : 'Browser'],
+          ['Schermo', ctx.schermo],
+          ['Online', ctx.online === false ? 'No' : (ctx.online === true ? 'Sì' : '')],
+          ['Lingua', ctx.lingua],
+          ['User agent', ctx.ua],
         ])}</div>
-        <div class="ud-card"><h4>Messaggio</h4><div class="sd-msg">${esc(s.testo || '')}</div></div>
-        <div class="sd-actions">
-          ${aperto
-            ? '<button class="btn-primary" id="sdResolve"><span class="lbl">Segna come risolto</span></button>'
-            : '<button class="btn-ghost" id="sdReopen">Riapri segnalazione</button>'}
+        <div class="ud-card"><h4>Conversazione</h4><div id="sdThread"><div class="admin-empty">Caricamento…</div></div></div>
+        <div class="sd-reply">
+          <textarea id="sdReplyTxt" rows="3" maxlength="2000" placeholder="Scrivi una risposta all'utente…"></textarea>
+          <button class="btn-primary btn-sm" id="sdReplySend">Invia risposta</button>
         </div>
+        <div class="sd-actions" id="sdActions"></div>
       </div>
     </div>`;
   wireAccountMenu(m.querySelector('.acc-overlay'));
   m.querySelector('#sdBack').addEventListener('click', () => go('#/supporto'));
 
-  async function setStato(stato, okMsg, btn) {
-    if (btn) btn.disabled = true;
+  const headEl = m.querySelector('#sdHead');
+  const detailsEl = m.querySelector('#sdDetails');
+  const threadEl = m.querySelector('#sdThread');
+  const actionsEl = m.querySelector('#sdActions');
+  const replyTxt = m.querySelector('#sdReplyTxt');
+  const replyBtn = m.querySelector('#sdReplySend');
+
+  function syncCache() { const c = SUPPORT_CACHE.find((x) => x.id === s.id); if (c) Object.assign(c, s); }
+
+  function renderMeta() {
+    const st = supStatus(s.stato), cm = catMeta(s.categoria);
+    headEl.innerHTML = `<span class="sup-badge ${st.badge}">${esc(st.lbl)}</span><span class="cat-chip ${cm.cls}">${esc(cm.lbl)}</span>`;
+    detailsEl.innerHTML = adminDetailRows([
+      ['Da', who],
+      ['Username', s.username ? '@' + s.username : '—'],
+      ['Categoria', cm.lbl],
+      ['Inviata il', fmtTs(s.created_at)],
+      ['Ultimo aggiornamento', s.updated_at ? fmtTs(s.updated_at) : '—'],
+      ['Risolta il', s.risolto_at ? fmtTs(s.risolto_at) : '—'],
+    ]);
+    const a = [];
+    if (s.stato === 'aperto') a.push('<button class="btn-ghost btn-sm" data-st="in_lavorazione">Prendi in carico</button>');
+    if (s.stato !== 'risolto') a.push('<button class="btn-primary btn-sm" data-st="risolto">Segna come risolto</button>');
+    else a.push('<button class="btn-ghost btn-sm" data-st="aperto">Riapri segnalazione</button>');
+    actionsEl.innerHTML = a.join('');
+  }
+  function renderThread() { threadEl.innerHTML = supThread(s, msgs, true); }
+
+  async function reload() {
+    try { msgs = (await fetchMessaggi([s.id]))[s.id] || []; } catch (_) { msgs = []; }
+    renderThread();
+  }
+
+  async function setStato(stato) {
+    const patch = stato === 'risolto'
+      ? { stato: 'risolto', risolto_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+      : { stato, risolto_at: null, updated_at: new Date().toISOString() };
     try {
-      const patch = stato === 'risolto'
-        ? { stato: 'risolto', risolto_at: new Date().toISOString() }
-        : { stato: 'aperto', risolto_at: null };
       const { error } = await window.sb.from('segnalazioni').update(patch).eq('id', s.id);
       if (error) throw error;
-      // aggiorna la cache locale così la lista riflette subito il cambiamento
-      const cached = SUPPORT_CACHE.find((x) => x.id === s.id);
-      if (cached) Object.assign(cached, patch);
-      toast(okMsg);
-      go('#/supporto');
-    } catch (err) {
-      if (btn) btn.disabled = false;
-      toast('Operazione non riuscita (sei offline?)');
-    }
+      Object.assign(s, patch); syncCache();
+      OPEN_REPORTS = SUPPORT_CACHE.filter((x) => x.stato !== 'risolto').length;
+      renderMeta();
+      toast(stato === 'risolto' ? 'Segnato come risolto ✓' : stato === 'in_lavorazione' ? 'Preso in carico ✓' : 'Riaperta');
+    } catch (_) { toast('Operazione non riuscita (sei offline?)'); }
   }
-  const rb = m.querySelector('#sdResolve');
-  if (rb) rb.addEventListener('click', () => setStato('risolto', 'Segnato come risolto ✓', rb));
-  const ro = m.querySelector('#sdReopen');
-  if (ro) ro.addEventListener('click', () => setStato('aperto', 'Segnalazione riaperta', ro));
 
+  actionsEl.addEventListener('click', (e) => { const b = e.target.closest('[data-st]'); if (b) setStato(b.dataset.st); });
+
+  replyBtn.addEventListener('click', async () => {
+    const testo = (replyTxt.value || '').trim();
+    if (testo.length < 1) { toast('Scrivi una risposta'); return; }
+    replyBtn.disabled = true;
+    try {
+      const { error } = await window.sb.from('segnalazioni_messaggi').insert({
+        segnalazione_id: s.id, autore_id: window.PALESTRA_USER.id, da_owner: true, testo,
+      });
+      if (error) throw error;
+      replyTxt.value = '';
+      if (s.stato === 'aperto') await setStato('in_lavorazione'); // rispondere = preso in carico
+      await reload();
+      toast('Risposta inviata ✓');
+    } catch (_) { toast('Invio non riuscito (sei offline?)'); }
+    finally { replyBtn.disabled = false; }
+  });
+
+  renderMeta();
+  reload();
   return m;
 }
 
