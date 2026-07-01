@@ -29,6 +29,19 @@ const toastEl = document.getElementById('toast');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/* con rete debole una richiesta può restare "appesa" all'infinito bloccando la UI
+   (bottone disabilitato, modale che non si chiude). Con questo timeout dopo `ms`
+   la promessa viene rifiutata: chi la chiama fa rollback, riabilita e avvisa. */
+function withTimeout(promise, ms = 15000) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout: rete assente o troppo lenta')), ms);
+    Promise.resolve(promise).then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
+}
+
 function fmtTs(iso) {
   const d = new Date(iso);
   if (isNaN(d)) return '';
@@ -90,6 +103,21 @@ function currentWeekIndex(scheda) {
   return Math.floor(days / 7); // 0-based: settimana 1 = indice 0
 }
 
+/* "settimana in corso" reale per un insieme di esercizi: la prima settimana in cui
+   non tutti gli esercizi (che hanno quella settimana) hanno un risultato registrato.
+   Se sono tutte complete, l'ultima. NB: si basa sui log, non sul calendario, così il
+   contatore combacia con la "settimana in corso" mostrata sulle card degli esercizi. */
+function currentWeekOf(exs) {
+  exs = exs || [];
+  const maxW = Math.max(1, ...exs.map((e) => (e.settimane || []).length));
+  for (let w = 0; w < maxW; w++) {
+    let withSlot = 0, done = 0;
+    exs.forEach((e) => { const s = (e.settimane || [])[w]; if (s) { withSlot++; if (s.log) done++; } });
+    if (withSlot > 0 && done < withSlot) return w;
+  }
+  return maxW - 1;
+}
+
 /* anello di completamento (stile Apple Fitness) */
 function ringSvg(done, total, opts = {}) {
   const size = opts.size || 72, sw = opts.stroke || 8;
@@ -109,8 +137,7 @@ function ringSvg(done, total, opts = {}) {
 function weekStats(sch) {
   const exs = (sch.giorni || []).flatMap((g) => g.esercizi || []);
   const maxWeeks = Math.max(1, ...exs.map((e) => (e.settimane || []).length));
-  let cw = currentWeekIndex(sch);
-  cw = cw < 0 ? 0 : Math.min(cw, maxWeeks - 1);
+  const cw = currentWeekOf(exs); // settimana in corso reale (dai log, non dal calendario)
   let totalThisWeek = 0, doneThisWeek = 0;
   exs.forEach((e) => {
     const w = (e.settimane || [])[cw];
@@ -199,8 +226,7 @@ function renderAttuale() {
   const giorno = sch.giorni[state.dayIndex];
   const curWeek = currentWeekIndex(sch);
   const dayExs = giorno.esercizi || [];
-  const maxW = Math.max(1, ...dayExs.map((e) => (e.settimane || []).length));
-  const cw = curWeek < 0 ? 0 : Math.min(curWeek, maxW - 1);
+  const cw = currentWeekOf(dayExs); // settimana in corso del giorno (dai log, non dal calendario)
   const dayDone = dayExs.filter((e) => { const w = (e.settimane || [])[cw]; return w && w.log; }).length;
   html += `<div class="section-head day-head">
       <div class="dh-txt"><h3>${esc(giorno.nome)}</h3><span class="count">${dayDone} di ${dayExs.length} fatti · sett. ${cw + 1}</span></div>
@@ -266,7 +292,7 @@ async function archiveScheda() {
   if (!sch) return;
   if (!await showConfirm('Resterà nello storico ma non sarà più quella in corso.', { title: 'Archiviare la scheda?', confirmLabel: 'Archivia', danger: true })) return;
   try {
-    const { error } = await window.sb.from('schede').update({ is_current: false }).eq('sched_id', sch.id);
+    const { error } = await withTimeout(window.sb.from('schede').update({ is_current: false }).eq('sched_id', sch.id));
     if (error) throw error;
     const s = state.data.schede.find((x) => x.id === sch.id);
     if (s) s.is_current = false;
@@ -384,7 +410,7 @@ function exerciseCard(e, index, curWeek, ctx) {
 
 /* ---------------- data entry (log settimana) ---------------- */
 async function persistGiorni(sch) {
-  const { error } = await window.sb.from('schede').update({ giorni: sch.giorni }).eq('sched_id', sch.id);
+  const { error } = await withTimeout(window.sb.from('schede').update({ giorni: sch.giorni }).eq('sched_id', sch.id));
   if (error) throw error;
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.data)); } catch (_) {}
 }
@@ -1208,7 +1234,7 @@ function buildProfile() {
     const spin = saveBtn.querySelector('.spin-dot'), lbl = saveBtn.querySelector('.lbl');
     saveBtn.disabled = true; spin.hidden = false; lbl.style.opacity = '.5';
     try {
-      const { error } = await window.sb.from('profiles').update({ nome, cognome, anagrafica }).eq('id', user.id);
+      const { error } = await withTimeout(window.sb.from('profiles').update({ nome, cognome, anagrafica }).eq('id', user.id));
       if (error) throw error;
       window.PALESTRA_USER.nome = nome;
       onUser(window.PALESTRA_USER);
@@ -1447,9 +1473,9 @@ function buildSchedaEditor(editId) {
     btn.disabled = true; if (spin) spin.hidden = false; if (lbl) lbl.style.opacity = '.5';
     try {
       if (isEdit) {
-        const { error } = await window.sb.from('schede')
+        const { error } = await withTimeout(window.sb.from('schede')
           .update({ titolo, descrizione, data, giorni })
-          .eq('user_id', uid).eq('sched_id', editId);
+          .eq('user_id', uid).eq('sched_id', editId));
         if (error) throw error;
         await loadData({ fresh: true });
         toast('Scheda aggiornata ✓');
@@ -1464,11 +1490,11 @@ function buildSchedaEditor(editId) {
         }
         let sched_id = fase + '.' + num;
         while (all.some((s) => s.id === sched_id)) { num++; sched_id = fase + '.' + num; }
-        const { data: ins, error } = await window.sb.from('schede')
+        const { data: ins, error } = await withTimeout(window.sb.from('schede')
           .insert({ user_id: uid, sched_id, fase, num, titolo, descrizione, data, is_current: true, giorni })
-          .select('id').single();
+          .select('id').single());
         if (error) throw error;
-        await window.sb.from('schede').update({ is_current: false }).eq('user_id', uid).neq('id', ins.id);
+        await withTimeout(window.sb.from('schede').update({ is_current: false }).eq('user_id', uid).neq('id', ins.id));
         await loadData({ fresh: true });
         toast('Scheda creata ✓');
         go('#/attuale');
@@ -1947,7 +1973,7 @@ function buildAdmin() {
 /* ---------------- supporto / segnalazioni ---------------- */
 let OPEN_REPORTS = 0;       // problemi non risolti (badge owner)
 let SUPPORT_CACHE = [];     // ultima lista caricata (per il dettaglio)
-const APP_VER = 'v36';      // versione asset, allegata al contesto tecnico
+const APP_VER = 'v37';      // versione asset, allegata al contesto tecnico
 const MAX_OPEN_SEGN = 6;    // anti-spam: max segnalazioni aperte per utente
 
 const BACK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
@@ -2118,9 +2144,9 @@ function buildSegnala() {
     if (testo.length < 2) { toast('Scrivi un messaggio'); return; }
     b.disabled = true;
     try {
-      const { error } = await window.sb.from('segnalazioni_messaggi').insert({
+      const { error } = await withTimeout(window.sb.from('segnalazioni_messaggi').insert({
         segnalazione_id: b.dataset.rid, autore_id: u.id, da_owner: false, testo,
-      });
+      }));
       if (error) throw error;
       toast('Risposta inviata ✓');
       await loadMine();
@@ -2133,14 +2159,14 @@ function buildSegnala() {
     if (myOpen >= MAX_OPEN_SEGN) { toast('Hai troppe segnalazioni aperte: aspetta una risposta prima di inviarne altre'); return; }
     btn.disabled = true; btn.querySelector('.lbl').textContent = 'Invio…';
     try {
-      const { error } = await window.sb.from('segnalazioni').insert({
+      const { error } = await withTimeout(window.sb.from('segnalazioni').insert({
         user_id: u.id,
         username: u.username || null,
         nome: u.nome || null,
         categoria: cat.value || 'altro',
         testo,
         contesto: captureContext(),
-      });
+      }));
       if (error) throw error;
       txt.value = ''; countEl.textContent = '0';
       toast('Segnalazione inviata ✓ grazie!');
@@ -2358,7 +2384,7 @@ function buildSupportDetail(s) {
       ? { stato: 'risolto', risolto_at: new Date().toISOString(), updated_at: new Date().toISOString() }
       : { stato, risolto_at: null, updated_at: new Date().toISOString() };
     try {
-      const { error } = await window.sb.from('segnalazioni').update(patch).eq('id', s.id);
+      const { error } = await withTimeout(window.sb.from('segnalazioni').update(patch).eq('id', s.id));
       if (error) throw error;
       Object.assign(s, patch); syncCache();
       OPEN_REPORTS = SUPPORT_CACHE.filter((x) => x.stato !== 'risolto').length;
@@ -2374,9 +2400,9 @@ function buildSupportDetail(s) {
     if (testo.length < 1) { toast('Scrivi una risposta'); return; }
     replyBtn.disabled = true;
     try {
-      const { error } = await window.sb.from('segnalazioni_messaggi').insert({
+      const { error } = await withTimeout(window.sb.from('segnalazioni_messaggi').insert({
         segnalazione_id: s.id, autore_id: window.PALESTRA_USER.id, da_owner: true, testo,
-      });
+      }));
       if (error) throw error;
       replyTxt.value = '';
       if (s.stato === 'aperto') await setStato('in_lavorazione'); // rispondere = preso in carico
@@ -2412,13 +2438,13 @@ async function savePushSubscription(sub) {
   if (!sub) throw new Error('nessuna sottoscrizione');
   const j = sub.toJSON();
   if (!j.keys || !j.keys.p256dh || !j.keys.auth) throw new Error('sottoscrizione senza chiavi');
-  const { error } = await window.sb.from('push_subscriptions').upsert({
+  const { error } = await withTimeout(window.sb.from('push_subscriptions').upsert({
     user_id: u.id,
     endpoint: j.endpoint,
     p256dh: j.keys.p256dh,
     auth: j.keys.auth,
     user_agent: navigator.userAgent.slice(0, 300),
-  }, { onConflict: 'endpoint' });
+  }, { onConflict: 'endpoint' }));
   if (error) throw new Error('salvataggio: ' + (error.message || 'errore database'));
 }
 
