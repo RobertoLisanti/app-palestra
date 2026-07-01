@@ -1,7 +1,7 @@
 /* ============================================================
-   Palestra PWA — logica
-   Sorgente dati: data/schede.json (generato dagli Excel,
-   poi gestito da chat). L'app e' di sola consultazione.
+   AndyGym — logica dell'app (PWA)
+   Dati su Supabase (Postgres + RLS): schede per-utente editabili
+   dall'app; autenticazione e gate in auth.js.
    ============================================================ */
 'use strict';
 
@@ -91,16 +91,6 @@ function showConfirm(msg, { title = '', confirmLabel = 'Conferma', danger = fals
     m.querySelector('.cfm-cancel').addEventListener('click', () => close(false));
     m.querySelector('.cfm-ok').addEventListener('click', () => close(true));
   });
-}
-
-/* settimana "corrente" stimata dalla data di inizio scheda */
-function currentWeekIndex(scheda) {
-  if (!scheda?.data) return -1;
-  const start = new Date(scheda.data + 'T00:00:00');
-  if (isNaN(start)) return -1;
-  const days = Math.floor((Date.now() - start.getTime()) / 86400000);
-  if (days < 0) return -1;
-  return Math.floor(days / 7); // 0-based: settimana 1 = indice 0
 }
 
 /* "settimana in corso" reale per un insieme di esercizi: la prima settimana in cui
@@ -224,7 +214,6 @@ function renderAttuale() {
     </button>`).join('') + `</div>`;
 
   const giorno = sch.giorni[state.dayIndex];
-  const curWeek = currentWeekIndex(sch);
   const dayExs = giorno.esercizi || [];
   const cw = currentWeekOf(dayExs); // settimana in corso del giorno (dai log, non dal calendario)
   const dayDone = dayExs.filter((e) => { const w = (e.settimane || [])[cw]; return w && w.log; }).length;
@@ -232,7 +221,7 @@ function renderAttuale() {
       <div class="dh-txt"><h3>${esc(giorno.nome)}</h3><span class="count">${dayDone} di ${dayExs.length} fatti · sett. ${cw + 1}</span></div>
       ${ringSvg(dayDone, dayExs.length, { size: 46, stroke: 6, cls: 'sm', label: dayDone + '/' + dayExs.length })}
     </div>`;
-  html += giorno.esercizi.map((e, i) => exerciseCard(e, i, curWeek, { editable: true, schedId: sch.id, dayIndex: state.dayIndex })).join('');
+  html += giorno.esercizi.map((e, i) => exerciseCard(e, i, { editable: true, schedId: sch.id, dayIndex: state.dayIndex })).join('');
   html += `<div class="sch-footer">
     <div class="week-actions">
       <button class="add-week-btn" id="removeWeekBtn">– Togli settimana</button>
@@ -328,7 +317,7 @@ function obiettivoText(ob) {
   return parts.join(' · ');
 }
 
-function exerciseCard(e, index, curWeek, ctx) {
+function exerciseCard(e, index, ctx) {
   const editable = !!(ctx && ctx.editable);
   const notes = (e.note || []).filter(Boolean);
   const weeks = e.settimane || [];
@@ -747,7 +736,7 @@ function renderDetail() {
     html += renderProgressi(giorno);
   } else {
     html += `<div class="section-head"><h3>${esc(giorno.nome)}</h3><span class="count">${giorno.esercizi.length} esercizi</span></div>`;
-    html += giorno.esercizi.map((e, i) => exerciseCard(e, i, -1)).join('');
+    html += giorno.esercizi.map((e, i) => exerciseCard(e, i)).join('');
     html += `<div class="sch-footer"><button class="sch-edit" id="editSchedaBtn">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         Modifica scheda
@@ -1118,7 +1107,13 @@ function wireAccountMenu(host) {
     if (e.target.closest('[data-acc="push"]')) { menu.hidden = true; setupPush(true); return; }
     if (e.target.closest('[data-acc="logout"]')) { menu.hidden = true; if (window.palestraLogout) window.palestraLogout(); }
   });
-  document.addEventListener('click', () => { menu.hidden = true; });
+  // chiudi cliccando fuori; il listener si auto-rimuove quando l'overlay è staccato
+  // dal DOM, così non si accumulano handler su document navigando tra le schermate.
+  const onDocClick = () => {
+    if (!host.isConnected) { document.removeEventListener('click', onDocClick); return; }
+    menu.hidden = true;
+  };
+  document.addEventListener('click', onDocClick);
 }
 
 function onUser(user) {
@@ -1596,7 +1591,7 @@ function schedaReadonly(s) {
     </div>`;
   giorni.forEach((g, gi) => {
     html += `<div class="usch-day"><h5>${esc(g.nome || ('Giorno ' + (gi + 1)))}</h5>`;
-    html += (g.esercizi || []).map((e, i) => exerciseCard(e, i, -1)).join('');
+    html += (g.esercizi || []).map((e, i) => exerciseCard(e, i)).join('');
     html += `</div>`;
   });
   return html + `</div>`;
