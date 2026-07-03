@@ -7,9 +7,8 @@
 
 const CACHE_KEY = 'palestra.data';
 
-// Grafici progressi nello storico: codice pronto ma NON ancora esposto agli utenti.
-// Roberto li testerà con dati reali ~metà luglio 2026; per accenderli: mettere a true e deploy.
-const PROGRESS_CHARTS_ENABLED = false;
+// Grafici progressi nello storico: attivi (tab "Progressi" nel dettaglio scheda dello storico).
+const PROGRESS_CHARTS_ENABLED = true;
 
 const state = {
   data: null,
@@ -214,13 +213,6 @@ function renderAttuale() {
     </button>`).join('') + `</div>`;
 
   const giorno = sch.giorni[state.dayIndex];
-  const dayExs = giorno.esercizi || [];
-  const cw = currentWeekOf(dayExs); // settimana in corso del giorno (dai log, non dal calendario)
-  const dayDone = dayExs.filter((e) => { const w = (e.settimane || [])[cw]; return w && w.log; }).length;
-  html += `<div class="section-head day-head">
-      <div class="dh-txt"><h3>${esc(giorno.nome)}</h3><span class="count">${dayDone} di ${dayExs.length} fatti · sett. ${cw + 1}</span></div>
-      ${ringSvg(dayDone, dayExs.length, { size: 46, stroke: 6, cls: 'sm', label: dayDone + '/' + dayExs.length })}
-    </div>`;
   html += giorno.esercizi.map((e, i) => exerciseCard(e, i, { editable: true, schedId: sch.id, dayIndex: state.dayIndex })).join('');
   html += `<div class="sch-footer">
     <div class="week-actions">
@@ -1968,7 +1960,7 @@ function buildAdmin() {
 /* ---------------- supporto / segnalazioni ---------------- */
 let OPEN_REPORTS = 0;       // problemi non risolti (badge owner)
 let SUPPORT_CACHE = [];     // ultima lista caricata (per il dettaglio)
-const APP_VER = 'v37';      // versione asset, allegata al contesto tecnico
+const APP_VER = 'v38';      // versione asset, allegata al contesto tecnico
 const MAX_OPEN_SEGN = 6;    // anti-spam: max segnalazioni aperte per utente
 
 const BACK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
