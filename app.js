@@ -16,6 +16,7 @@ const state = {
   schedaId: null,       // scheda mostrata in dettaglio/attuale
   dayIndex: 0,
   detailTab: 'scheda',  // 'scheda' | 'progressi' (dettaglio storico)
+  attualeTab: 'scheda', // 'scheda' | 'progressi' (scheda attuale)
   progMetric: 'peso',   // 'peso' | 'volume' (grafico progressi)
 };
 
@@ -212,24 +213,41 @@ function renderAttuale() {
       <span class="n">Giorno ${i + 1}</span>${esc(cleanDay(g.nome, i))}
     </button>`).join('') + `</div>`;
 
+  const tab = (PROGRESS_CHARTS_ENABLED && state.attualeTab === 'progressi') ? 'progressi' : 'scheda';
+  if (PROGRESS_CHARTS_ENABLED) {
+    html += `<div class="detail-tabs">
+        <button data-tab="scheda" class="${tab === 'scheda' ? 'on' : ''}">Scheda</button>
+        <button data-tab="progressi" class="${tab === 'progressi' ? 'on' : ''}">📈 Progressi</button>
+      </div>`;
+  }
+
   const giorno = sch.giorni[state.dayIndex];
-  html += giorno.esercizi.map((e, i) => exerciseCard(e, i, { editable: true, schedId: sch.id, dayIndex: state.dayIndex })).join('');
-  html += `<div class="sch-footer">
-    <div class="week-actions">
-      <button class="add-week-btn" id="removeWeekBtn">– Togli settimana</button>
-      <button class="add-week-btn" id="addWeekBtn">+ Aggiungi settimana</button>
-    </div>
-    <button class="sch-edit" id="editSchedaBtn">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-      Modifica scheda
-    </button>
-    <button class="sch-edit sch-archive" id="archiveSchedaBtn">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg>
-      Archivia scheda
-    </button>
-  </div>`;
+  if (tab === 'progressi') {
+    html += `<div class="section-head"><h3>Progressi · ${esc(giorno.nome || ('Giorno ' + (state.dayIndex + 1)))}</h3><span class="count">settimana per settimana</span></div>`;
+    html += renderProgressi(giorno);
+  } else {
+    html += giorno.esercizi.map((e, i) => exerciseCard(e, i, { editable: true, schedId: sch.id, dayIndex: state.dayIndex })).join('');
+    html += `<div class="sch-footer">
+      <div class="week-actions">
+        <button class="add-week-btn" id="removeWeekBtn">– Togli settimana</button>
+        <button class="add-week-btn" id="addWeekBtn">+ Aggiungi settimana</button>
+      </div>
+      <button class="sch-edit" id="editSchedaBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        Modifica scheda
+      </button>
+      <button class="sch-edit sch-archive" id="archiveSchedaBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg>
+        Archivia scheda
+      </button>
+    </div>`;
+  }
 
   viewEl.innerHTML = html;
+  viewEl.querySelectorAll('.detail-tabs button').forEach((b) =>
+    b.addEventListener('click', () => { state.attualeTab = b.dataset.tab; renderAttuale(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
+  viewEl.querySelectorAll('.prog-metric button').forEach((b) =>
+    b.addEventListener('click', () => { state.progMetric = b.dataset.metric; renderAttuale(); }));
   viewEl.querySelectorAll('.day-pill').forEach((b) =>
     b.addEventListener('click', () => { state.dayIndex = +b.dataset.day; renderAttuale(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
   const awb = document.getElementById('addWeekBtn');
@@ -1960,7 +1978,7 @@ function buildAdmin() {
 /* ---------------- supporto / segnalazioni ---------------- */
 let OPEN_REPORTS = 0;       // problemi non risolti (badge owner)
 let SUPPORT_CACHE = [];     // ultima lista caricata (per il dettaglio)
-const APP_VER = 'v38';      // versione asset, allegata al contesto tecnico
+const APP_VER = 'v39';      // versione asset, allegata al contesto tecnico
 const MAX_OPEN_SEGN = 6;    // anti-spam: max segnalazioni aperte per utente
 
 const BACK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
