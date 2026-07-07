@@ -1433,6 +1433,7 @@ function buildSchedaEditor(editId) {
       esercizi: (g.esercizi || []).map((e) => ({
         nome: e.nome || '',
         note: Array.isArray(e.note) ? e.note.filter(Boolean).join(' ') : (e.note || ''),
+        ...(e.recupero ? { recupero: e.recupero } : {}),
       })),
     }));
     if (!ed.giorni.length) ed.giorni = [{ nome: '1° Giorno', esercizi: [{ nome: '' }] }];
@@ -1465,11 +1466,13 @@ function buildSchedaEditor(editId) {
       nome: (g.nome || '').trim() || ((gi + 1) + '° Giorno'),
       esercizi: g.esercizi.filter((e) => (e.nome || '').trim()).map((e) => {
         const noteStr = Array.isArray(e.note) ? e.note.filter(Boolean).join(' ') : (e.note || '');
-        return {
+        const ex = {
           nome: e.nome.trim(),
           note: noteStr.trim() ? [noteStr.trim()] : [],
           settimane: exSettimane(e),
         };
+        if (e.recupero) ex.recupero = e.recupero; // prescrizione esercizio: da preservare tra un'edit e l'altra
+        return ex;
       }),
     })).filter((g) => g.esercizi.length > 0);
     if (!giorni.length) { toast('Aggiungi almeno un esercizio con un nome'); return; }
@@ -1978,7 +1981,7 @@ function buildAdmin() {
 /* ---------------- supporto / segnalazioni ---------------- */
 let OPEN_REPORTS = 0;       // problemi non risolti (badge owner)
 let SUPPORT_CACHE = [];     // ultima lista caricata (per il dettaglio)
-const APP_VER = 'v39';      // versione asset, allegata al contesto tecnico
+const APP_VER = 'v40';      // versione asset, allegata al contesto tecnico
 const MAX_OPEN_SEGN = 6;    // anti-spam: max segnalazioni aperte per utente
 
 const BACK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
