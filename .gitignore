@@ -9,6 +9,9 @@ data/
 # nota personale, non va pubblicata
 ROADMAP.md
 
+# memoria di progetto locale (dati sensibili, repo pubblico)
+.claude/local.md
+
 # os
 Thumbs.db
 .DS_Store
