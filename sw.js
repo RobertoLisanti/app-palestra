@@ -76,9 +76,14 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return; // Supabase & co. → rete diretta
 
-  // Network-first: rete fresca, cache come fallback offline.
+  // L'HTML va SEMPRE riletto dalla rete ignorando la cache HTTP del browser:
+  // GitHub Pages serve index.html con un max-age, e un semplice fetch(req) lo
+  // rispetta, lasciando l'utente su una versione vecchia (con i vecchi ?v=N).
+  // Gli asset invece sono versionati, quindi per loro basta il network-first.
+  const isDoc = req.mode === 'navigate' || req.destination === 'document';
+
   event.respondWith(
-    fetch(req)
+    (isDoc ? fetch(req.url, { cache: 'reload', credentials: 'same-origin' }) : fetch(req))
       .then((res) => {
         if (res && res.ok) {
           const copy = res.clone();

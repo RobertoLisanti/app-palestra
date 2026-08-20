@@ -168,6 +168,17 @@ function schedaLabel(s) {
   return t || ('Scheda ' + s.id);
 }
 
+/* lo storico mostra solo le schede passate: l'attuale ha già la sua vista */
+function schedeArchiviate() {
+  if (!state.data) return [];
+  const cur = state.data.correnteId;
+  return state.data.schede.filter((s) => s.id !== cur);
+}
+
+function nSchedeLabel(n) {
+  return n === 1 ? '1 scheda archiviata' : n + ' schede archiviate';
+}
+
 /* prossimo codice scheda: progressivo semplice, parte da 1 e cresce di 1 */
 function nextSchedaCode(schede) {
   const nums = (schede || []).map((s) => parseInt(s.id, 10)).filter((n) => !isNaN(n));
@@ -688,26 +699,29 @@ function openRestModal(schId, dayIdx, exIdx) {
 
 /* ---------------- render: STORICO ---------------- */
 function renderStorico() {
+  const archiviate = schedeArchiviate();
   topTitle.textContent = 'Storico';
-  topSub.textContent = state.data ? `${state.data.schede.length} schede archiviate` : '';
+  topSub.textContent = state.data ? nSchedeLabel(archiviate.length) : '';
 
-  if (!state.data || !state.data.schede.length) {
-    viewEl.innerHTML = emptyState('Storico vuoto', 'Qui finiranno le tue schede passate. Creane una per cominciare 💪', { icon: 'history', cta: { href: '#/nuova', label: 'Crea una scheda' } });
+  if (!archiviate.length) {
+    // se c'è già una scheda in corso lo storico è solo "ancora vuoto", non manca una scheda
+    const haAttuale = !!currentScheda();
+    viewEl.innerHTML = haAttuale
+      ? emptyState('Storico vuoto', 'Quando creerai una nuova scheda, quella attuale finirà qui.', { icon: 'history', cta: { href: '#/attuale', label: 'Vai alla scheda attuale' } })
+      : emptyState('Storico vuoto', 'Qui finiranno le tue schede passate. Creane una per cominciare 💪', { icon: 'history', cta: { href: '#/nuova', label: 'Crea una scheda' } });
     return;
   }
 
-  const schede = [...state.data.schede].reverse(); // piu' recenti in alto
-  const curId = state.data.correnteId;
+  const schede = [...archiviate].reverse(); // piu' recenti in alto
 
   const html = `<div class="section-head"><h3>Le tue schede</h3><span class="count">dalla più recente</span></div>
     <div class="timeline">` + schede.map((s) => {
     const nEser = s.giorni.reduce((a, g) => a + g.esercizi.length, 0);
-    const isCur = s.id === curId;
-    return `<div class="hist-card ${isCur ? 'is-current' : ''}" data-id="${esc(s.id)}">
+    return `<div class="hist-card" data-id="${esc(s.id)}">
       <div class="hist-badge"><span class="f">${esc(s.id)}</span><span class="s">scheda</span></div>
       <div class="hist-info">
         <h4>${esc(schedaLabel(s))}</h4>
-        <p class="muted">${esc(fmtDate(s.data))} · ${s.giorni.length} giorni · ${nEser} esercizi ${isCur ? '<span class="live">• attuale</span>' : ''}</p>
+        <p class="muted">${esc(fmtDate(s.data))} · ${s.giorni.length} giorni · ${nEser} esercizi</p>
       </div>
       <span class="hist-arrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
     </div>`;
@@ -999,7 +1013,7 @@ function renderHome() {
   topSub.textContent = owner ? 'Area proprietario' : 'La tua area allenamenti';
 
   const sch = currentScheda();
-  const nSchede = state.data ? state.data.schede.length : 0;
+  const nSchede = schedeArchiviate().length;
   const tile = (href, icon, title, sub, accent) =>
     `<button class="htile ${accent || ''}" data-go="${href}">
       <span class="htile-ico">${icon}</span>
@@ -1033,7 +1047,7 @@ function renderHome() {
     <div class="htiles">
       ${tile('#/attuale', HOME_ICONS.dumbbell, 'Scheda attuale', sch ? schedaLabel(sch) : 'Nessuna scheda', 'accent')}
       ${tile('#/nuova', HOME_ICONS.plus, 'Crea scheda', 'Archivia l\'attuale e creane una nuova')}
-      ${tile('#/storico', HOME_ICONS.history, 'Storico', nSchede ? nSchede + ' schede archiviate' : 'Le tue schede passate')}
+      ${tile('#/storico', HOME_ICONS.history, 'Storico', nSchede ? nSchedeLabel(nSchede) : 'Le tue schede passate')}
       ${tile('#/profilo', HOME_ICONS.user, 'Il mio profilo', 'Anagrafica e dati personali')}
       ${owner ? tile('#/admin', HOME_ICONS.users, 'Gestione utenti', 'Dashboard, approvazioni, anagrafiche', 'owner') : ''}
       ${owner
@@ -2003,7 +2017,7 @@ function buildAdmin() {
 /* ---------------- supporto / segnalazioni ---------------- */
 let OPEN_REPORTS = 0;       // problemi non risolti (badge owner)
 let SUPPORT_CACHE = [];     // ultima lista caricata (per il dettaglio)
-const APP_VER = 'v41';      // versione asset, allegata al contesto tecnico
+const APP_VER = 'v42';      // versione asset, allegata al contesto tecnico
 const MAX_OPEN_SEGN = 6;    // anti-spam: max segnalazioni aperte per utente
 
 const BACK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
