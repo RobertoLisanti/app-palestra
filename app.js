@@ -160,6 +160,20 @@ function rowsToData(rows) {
   return { correnteId: cur ? cur.id : null, schede };
 }
 
+/* etichetta di una scheda: il codice è il progressivo (sched_id), il titolo è
+   la descrizione facoltativa scritta a mano; senza descrizione -> "Scheda N" */
+function schedaLabel(s) {
+  if (!s) return '';
+  const t = (s.titolo || '').trim();
+  return t || ('Scheda ' + s.id);
+}
+
+/* prossimo codice scheda: progressivo semplice, parte da 1 e cresce di 1 */
+function nextSchedaCode(schede) {
+  const nums = (schede || []).map((s) => parseInt(s.id, 10)).filter((n) => !isNaN(n));
+  return (nums.length ? Math.max(...nums) : 0) + 1;
+}
+
 async function loadData({ fresh = true } = {}) {
   try {
     const { data: rows, error } = await window.sb
@@ -169,10 +183,14 @@ async function loadData({ fresh = true } = {}) {
       .order('num', { ascending: true });
     if (error) throw error;
     state.data = rowsToData(rows || []);
+    state.stale = false; // in memoria c'è la versione del server
     if (!state.schedaId) state.schedaId = state.data.correnteId;
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.data)); } catch (_) {}
     return true;
   } catch (e) {
+    // i dati in memoria/cache possono essere vecchi: da qui in poi si legge ma NON si
+    // riscrive (vedi persistGiorni), altrimenti si sovrascrive il server con una copia stantia
+    state.stale = true;
     if (state.data) return false; // tieni i dati già in memoria
     try {
       const cached = localStorage.getItem(CACHE_KEY); // copia offline
@@ -186,7 +204,7 @@ async function loadData({ fresh = true } = {}) {
 function renderAttuale() {
   const sch = currentScheda();
   topTitle.textContent = 'Scheda attuale';
-  topSub.textContent = sch ? sch.titolo : '';
+  topSub.textContent = sch ? schedaLabel(sch) : '';
 
   if (!sch) {
     viewEl.innerHTML = emptyState('Ancora nessuna scheda', 'Crea la tua prima scheda e inizia ad allenarti.', { icon: 'dumbbell', cta: { href: '#/nuova', label: 'Crea una scheda' } });
@@ -200,7 +218,7 @@ function renderAttuale() {
   let html = `
     <section class="hero">
       <div class="eyebrow">In corso</div>
-      <h2>${esc(sch.titolo)}</h2>
+      <h2>${esc(schedaLabel(sch))}</h2>
       <div class="meta">
         <span class="chip accent"><b>${nGiorni}</b>&nbsp;giorni</span>
         <span class="chip"><b>${nEser}</b>&nbsp;esercizi</span>
@@ -409,6 +427,10 @@ function exerciseCard(e, index, ctx) {
 
 /* ---------------- data entry (log settimana) ---------------- */
 async function persistGiorni(sch) {
+  // qui si riscrive TUTTO l'array giorni: se la copia in memoria arriva dalla cache
+  // offline, salvare cancellerebbe le modifiche fatte nel frattempo (es. esercizi
+  // eliminati che "tornano"). Meglio rifiutare: il chiamante annulla e avvisa.
+  if (state.stale) throw new Error('dati non aggiornati (offline): riapri l\'app quando sei connesso');
   const { error } = await withTimeout(window.sb.from('schede').update({ giorni: sch.giorni }).eq('sched_id', sch.id));
   if (error) throw error;
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.data)); } catch (_) {}
@@ -682,9 +704,9 @@ function renderStorico() {
     const nEser = s.giorni.reduce((a, g) => a + g.esercizi.length, 0);
     const isCur = s.id === curId;
     return `<div class="hist-card ${isCur ? 'is-current' : ''}" data-id="${esc(s.id)}">
-      <div class="hist-badge"><span class="f">${esc(s.fase)}.${esc(s.num)}</span><span class="s">scheda</span></div>
+      <div class="hist-badge"><span class="f">${esc(s.id)}</span><span class="s">scheda</span></div>
       <div class="hist-info">
-        <h4>${esc(s.titolo)}</h4>
+        <h4>${esc(schedaLabel(s))}</h4>
         <p class="muted">${esc(fmtDate(s.data))} · ${s.giorni.length} giorni · ${nEser} esercizi ${isCur ? '<span class="live">• attuale</span>' : ''}</p>
       </div>
       <span class="hist-arrow"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
@@ -705,7 +727,7 @@ function openDetail(id) {
 function renderDetail() {
   const sch = schedaById(state.schedaId);
   if (!sch) { renderStorico(); return; }
-  topTitle.textContent = sch.titolo;
+  topTitle.textContent = schedaLabel(sch);
   topSub.textContent = fmtDate(sch.data);
 
   const nGiorni = sch.giorni.length;
@@ -719,7 +741,7 @@ function renderDetail() {
     </div>
     <section class="hero">
       <div class="eyebrow">Archivio</div>
-      <h2>${esc(sch.titolo)}</h2>
+      <h2>${esc(schedaLabel(sch))}</h2>
       <div class="meta">
         <span class="chip">${esc(fmtDate(sch.data))}</span>
         <span class="chip"><b>${nGiorni}</b>&nbsp;giorni</span>
@@ -992,7 +1014,7 @@ function renderHome() {
           <div class="hh-greet">
             <div class="eyebrow">${owner ? 'Proprietario' : 'Bentornato'}</div>
             <h2>Ciao, ${esc(name)} 👋</h2>
-            <p class="muted">Settimana ${st.weekNum} di ${st.totalWeeks} · ${esc(sch.titolo)}</p>
+            <p class="muted">Settimana ${st.weekNum} di ${st.totalWeeks} · ${esc(schedaLabel(sch))}</p>
           </div>
           ${ringSvg(st.doneThisWeek, st.totalThisWeek, { size: 76, stroke: 9 })}
         </div>
@@ -1005,11 +1027,11 @@ function renderHome() {
     : `<section class="home-hero">
         <div class="eyebrow">${owner ? 'Proprietario' : 'Bentornato'}</div>
         <h2>Ciao, ${esc(name)} 👋</h2>
-        <p class="muted">${sch ? 'Scheda attuale: ' + esc(sch.titolo) : 'Nessuna scheda attiva al momento'}</p>
+        <p class="muted">${sch ? 'Scheda attuale: ' + esc(schedaLabel(sch)) : 'Nessuna scheda attiva al momento'}</p>
       </section>`;
   let html = hero + `
     <div class="htiles">
-      ${tile('#/attuale', HOME_ICONS.dumbbell, 'Scheda attuale', sch ? sch.titolo : 'Nessuna scheda', 'accent')}
+      ${tile('#/attuale', HOME_ICONS.dumbbell, 'Scheda attuale', sch ? schedaLabel(sch) : 'Nessuna scheda', 'accent')}
       ${tile('#/nuova', HOME_ICONS.plus, 'Crea scheda', 'Archivia l\'attuale e creane una nuova')}
       ${tile('#/storico', HOME_ICONS.history, 'Storico', nSchede ? nSchede + ' schede archiviate' : 'Le tue schede passate')}
       ${tile('#/profilo', HOME_ICONS.user, 'Il mio profilo', 'Anagrafica e dati personali')}
@@ -1288,12 +1310,14 @@ function buildSchedaEditor(editId) {
   const dataVal = isEdit ? (editScheda.data || today) : today;
   const titoloVal = isEdit ? (editScheda.titolo || '') : '';
   const descrVal = isEdit ? (editScheda.descrizione || '') : '';
+  const codeVal = isEdit ? editScheda.id : String(nextSchedaCode(schede));
+  const codeHtml = `<p class="ed-hint">Codice scheda: <b>${esc(codeVal)}</b>${isEdit ? '' : ' · assegnato automaticamente'}</p>`;
   const hintHtml = isEdit ? '' : '<p class="ed-hint">Salvando, la tua scheda attuale verrà archiviata nello storico e questa diventerà l\'attuale.</p>';
 
   const sourceOpts = (!isEdit && schede.length)
     ? `<label class="field-sm"><span>Parti da una scheda esistente</span><select id="edSource">
         <option value="">Scheda vuota</option>
-        ${[...schede].reverse().map((s) => `<option value="${esc(s.id)}">${esc(s.titolo || ('Scheda ' + s.id))} (${esc(s.fase)}.${esc(s.num)})${s.id === correnteId ? ' · attuale' : ''}</option>`).join('')}
+        ${[...schede].reverse().map((s) => `<option value="${esc(s.id)}">${esc(s.id)} · ${esc(schedaLabel(s))}${s.id === correnteId ? ' · attuale' : ''}</option>`).join('')}
       </select></label>`
     : '';
 
@@ -1317,8 +1341,9 @@ function buildSchedaEditor(editId) {
         <div class="ed-card">
           <h4>Dettagli</h4>
           ${sourceOpts}
-          <label class="field-sm"><span>Nome scheda</span><input id="edTitolo" type="text" value="${esc(titoloVal)}" placeholder="es. Fase 4 · Forza" autocomplete="off" /></label>
-          <label class="field-sm"><span>Descrizione <span class="opt">(facoltativa)</span></span><textarea id="edDescr" rows="2" placeholder="Obiettivi, note generali…">${esc(descrVal)}</textarea></label>
+          ${codeHtml}
+          <label class="field-sm"><span>Descrizione <span class="opt">(facoltativa)</span></span><input id="edTitolo" type="text" value="${esc(titoloVal)}" placeholder="es. Forza · massa" autocomplete="off" /></label>
+          <label class="field-sm"><span>Note <span class="opt">(facoltative)</span></span><textarea id="edDescr" rows="2" placeholder="Obiettivi, note generali…">${esc(descrVal)}</textarea></label>
           <div class="ed-row2">
             <label class="field-sm"><span>Settimane</span><input id="edSettimane" type="number" min="1" max="12" inputmode="numeric" value="${settimaneVal}" /></label>
             <label class="field-sm"><span>Inizio</span><input id="edData" type="date" value="${dataVal}" /></label>
@@ -1445,8 +1470,7 @@ function buildSchedaEditor(editId) {
   // salva: inserisce la nuova come attuale e archivia le altre
   $('#edSave').addEventListener('click', async (ev) => {
     const btn = ev.currentTarget;
-    const titolo = $('#edTitolo').value.trim();
-    if (!titolo) { toast('Dai un nome alla scheda'); return; }
+    const titolo = $('#edTitolo').value.trim(); // descrizione facoltativa: senza, si mostra "Scheda N"
     let settimane = parseInt($('#edSettimane').value, 10);
     if (isNaN(settimane) || settimane < 1) settimane = 1;
     if (settimane > 12) settimane = 12;
@@ -1490,14 +1514,11 @@ function buildSchedaEditor(editId) {
         go(wasCurrent ? '#/attuale' : '#/scheda/' + editId);
       } else {
         const all = (state.data && state.data.schede) ? state.data.schede : [];
-        let fase = 1, num = 1;
-        if (all.length) {
-          const mf = Math.max(...all.map((s) => +s.fase || 0)) || 1;
-          const inF = all.filter((s) => (+s.fase || 0) === mf);
-          fase = mf; num = Math.max(0, ...inF.map((s) => +s.num || 0)) + 1;
-        }
-        let sched_id = fase + '.' + num;
-        while (all.some((s) => s.id === sched_id)) { num++; sched_id = fase + '.' + num; }
+        let num = nextSchedaCode(all);
+        let sched_id = String(num);
+        while (all.some((s) => s.id === sched_id)) { num++; sched_id = String(num); }
+        // `fase` non è più usato ma resta valorizzato: l'ordinamento è `fase, num`
+        const fase = 1;
         const { data: ins, error } = await withTimeout(window.sb.from('schede')
           .insert({ user_id: uid, sched_id, fase, num, titolo, descrizione, data, is_current: true, giorni })
           .select('id').single());
@@ -1594,11 +1615,12 @@ function adminDetailRows(pairs) {
 function schedaReadonly(s) {
   const giorni = s.giorni || [];
   const nEser = giorni.reduce((acc, g) => acc + (g.esercizi || []).length, 0);
+  const code = s.sched_id || s.id || ''; // qui arrivano righe grezze dall'edge function admin
   let html = `<div class="usch">
     <div class="usch-hd">
-      <div class="usch-badge">${esc(s.fase)}.${esc(s.num)}</div>
+      <div class="usch-badge">${esc(code)}</div>
       <div class="usch-hd-txt">
-        <div class="usch-title">${esc(s.titolo)}${s.is_current ? ' <span class="usch-cur">attuale</span>' : ''}</div>
+        <div class="usch-title">${esc(schedaLabel({ id: code, titolo: s.titolo }))}${s.is_current ? ' <span class="usch-cur">attuale</span>' : ''}</div>
         <div class="muted usch-meta">${esc(fmtDate(s.data))} · ${giorni.length} giorni · ${nEser} esercizi</div>
       </div>
     </div>`;
@@ -1981,7 +2003,7 @@ function buildAdmin() {
 /* ---------------- supporto / segnalazioni ---------------- */
 let OPEN_REPORTS = 0;       // problemi non risolti (badge owner)
 let SUPPORT_CACHE = [];     // ultima lista caricata (per il dettaglio)
-const APP_VER = 'v40';      // versione asset, allegata al contesto tecnico
+const APP_VER = 'v41';      // versione asset, allegata al contesto tecnico
 const MAX_OPEN_SEGN = 6;    // anti-spam: max segnalazioni aperte per utente
 
 const BACK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
