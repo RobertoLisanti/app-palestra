@@ -2,6 +2,8 @@
    AndyGym — autenticazione
    - Iscrizione: email + username + password (conferma email attiva)
    - Login: username + password (email risolta lato server)
+   - Sessione: resta valida se l'app viene riaperta entro SESSION_GRACE_MIN
+     minuti (config.js); oltre quella finestra si rifà il login.
    La protezione dei dati è lato server (RLS su Supabase).
    (L'accesso biometrico sarà aggiunto più avanti.)
    ============================================================ */
@@ -10,15 +12,49 @@
 (function () {
   const cfg = window.PALESTRA_CONFIG;
   const FN = cfg.SUPABASE_URL + '/functions/v1';
-  // Sessione in sessionStorage: resta valida finché l'app è aperta (sopravvive a
-  // reload, refresh e aggiornamenti del service worker), ma si azzera quando
-  // l'app viene chiusa davvero → al riavvio è obbligatorio rifare il login.
+
+  /* ---------------- finestra di rientro ----------------
+     La sessione sta in localStorage (sopravvive alla chiusura dell'app), ma NON
+     per sempre: teniamo un "ultimo utilizzo" e allo start, se l'app è rimasta
+     chiusa più di SESSION_GRACE_MIN minuti, buttiamo via il token → login.
+     Con SESSION_GRACE_MIN = 0 si torna al comportamento vecchio (sessionStorage:
+     dentro solo finché l'app è aperta). */
+  const GRACE_MIN = Number(cfg.SESSION_GRACE_MIN) || 0;
+  const GRACE_MS = GRACE_MIN * 60 * 1000;
+  const LAST_SEEN = 'palestra.lastSeen';
+  const authStore = GRACE_MS > 0 ? window.localStorage : window.sessionStorage;
+
+  function touchLastSeen() {
+    if (GRACE_MS <= 0) return;
+    try { localStorage.setItem(LAST_SEEN, String(Date.now())); } catch (_) {}
+  }
+  function clearLastSeen() {
+    try { localStorage.removeItem(LAST_SEEN); } catch (_) {}
+  }
+  // butta via il token salvato da supabase-js (chiavi "sb-<ref>-auth-token")
+  function purgeStoredSession() {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => /^sb-.*-auth-token/.test(k))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch (_) {}
+    clearLastSeen();
+  }
+  // da valutare PRIMA di creare il client, altrimenti supabase-js legge già il token
+  (function expireIfStale() {
+    if (GRACE_MS <= 0) { purgeStoredSession(); return; }
+    let last = 0;
+    try { last = Number(localStorage.getItem(LAST_SEEN)) || 0; } catch (_) {}
+    // niente timestamp = sessione mai "timbrata": non ci fidiamo
+    if (!last || Date.now() - last > GRACE_MS) purgeStoredSession();
+  })();
+
   const client = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storage: window.sessionStorage,
+      storage: authStore,
     },
   });
   window.sb = client;
@@ -223,17 +259,32 @@
     };
     if (window.PalestraApp && typeof window.PalestraApp.onUser === 'function') window.PalestraApp.onUser(window.PALESTRA_USER);
     if (!started) { started = true; window.PalestraApp && window.PalestraApp.start(); }
+    startSessionHeartbeat();
     handling = false;
   }
 
+  /* Timbra l'"ultimo utilizzo" finché l'app è in uso. Serve il battito periodico
+     perché su mobile l'app può essere uccisa senza che scatti alcun evento di
+     chiusura: l'ultimo battito utile diventa il riferimento per la finestra. */
+  let heartbeat = null;
+  function startSessionHeartbeat() {
+    if (GRACE_MS <= 0 || heartbeat) return;
+    touchLastSeen();
+    heartbeat = setInterval(() => { if (!document.hidden) touchLastSeen(); }, 30000);
+    document.addEventListener('visibilitychange', touchLastSeen);
+    window.addEventListener('pagehide', touchLastSeen);
+  }
+
   window.palestraLogout = async function () {
+    purgeStoredSession(); // via il token: il logout non deve lasciare rientri
     try { await client.auth.signOut(); } catch (_) {}
     location.reload();
   };
 
   client.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_OUT') { showOverlay(); }
+    if (event === 'SIGNED_OUT') { clearLastSeen(); showOverlay(); }
     else if (session && !started) { onAuthed(session); }
+    else if (session) { touchLastSeen(); } // es. token rinnovato
   });
 
   /* ---------------- boot ---------------- */

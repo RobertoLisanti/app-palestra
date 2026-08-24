@@ -8,4 +8,7 @@ window.PALESTRA_CONFIG = {
   APP_URL: 'https://robertolisanti.github.io/app-palestra/',
   // chiave pubblica VAPID per le notifiche push (la privata sta solo su Supabase)
   VAPID_PUBLIC: 'BJeGTJjApqdO-8cJ_BnkKbHSHawFXO57VNOU27GtK7djQG2RqsZsjELZ29GmSojCw0i-QD4yDH307ZT1fnka69Q',
+  // Finestra di rientro: se l'app viene chiusa e riaperta entro questi minuti si
+  // resta loggati; oltre, si rifà il login. 0 = sessione solo finché l'app è aperta.
+  SESSION_GRACE_MIN: 30,
 };
