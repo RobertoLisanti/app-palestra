@@ -59,8 +59,9 @@ function schedaById(id) {
   return state.data?.schede?.find((s) => s.id === id) || null;
 }
 function currentScheda() {
-  const id = state.data?.correnteId;
-  return schedaById(id) || state.data?.schede?.[state.data.schede.length - 1] || null;
+  // nessun fallback sull'ultima scheda: dopo un'archiviazione NON deve esserci una
+  // scheda in corso, altrimenti quella appena archiviata riappare sotto "Attuale"
+  return schedaById(state.data?.correnteId);
 }
 
 let toastTimer;
@@ -154,9 +155,10 @@ function rowsToData(rows) {
     id: r.sched_id, fase: r.fase, num: r.num, titolo: r.titolo, descrizione: r.descrizione || '',
     data: r.data, giorni: r.giorni || [], is_current: r.is_current,
   }));
-  // la corrente è l'ultima marcata is_current (la più recente); fallback: l'ultima inserita
+  // la corrente è l'ultima marcata is_current (la più recente). Nessun fallback
+  // sull'ultima inserita: se l'utente ha archiviato tutto, non c'è scheda in corso.
   const currents = schede.filter((s) => s.is_current);
-  const cur = currents.length ? currents[currents.length - 1] : (schede.length ? schede[schede.length - 1] : null);
+  const cur = currents.length ? currents[currents.length - 1] : null;
   return { correnteId: cur ? cur.id : null, schede };
 }
 
@@ -218,7 +220,11 @@ function renderAttuale() {
   topSub.textContent = sch ? schedaLabel(sch) : '';
 
   if (!sch) {
-    viewEl.innerHTML = emptyState('Ancora nessuna scheda', 'Crea la tua prima scheda e inizia ad allenarti.', { icon: 'dumbbell', cta: { href: '#/nuova', label: 'Crea una scheda' } });
+    // primo avvio vs "ho archiviato tutto": messaggi diversi, stessa CTA
+    const haStorico = schedeArchiviate().length > 0;
+    viewEl.innerHTML = haStorico
+      ? emptyState('Nessuna scheda in corso', 'Le tue schede passate sono nello storico. Creane una nuova per riprendere.', { icon: 'dumbbell', cta: { href: '#/nuova', label: 'Crea una scheda' } })
+      : emptyState('Ancora nessuna scheda', 'Crea la tua prima scheda e inizia ad allenarti.', { icon: 'dumbbell', cta: { href: '#/nuova', label: 'Crea una scheda' } });
     return;
   }
 
@@ -331,6 +337,33 @@ async function archiveScheda() {
     go('#/storico');
   } catch (err) {
     toast('Archiviazione non riuscita (sei offline?)');
+  }
+}
+
+/* Elimina una scheda dello storico (solo le proprie: RLS). La scheda in corso non
+   si elimina da qui: prima va archiviata, così non si resta senza "attuale" per sbaglio. */
+async function deleteScheda(id) {
+  const sch = schedaById(id);
+  if (!sch) return;
+  if (sch.id === state.data.correnteId) { toast('È la scheda in corso: prima archiviala'); return; }
+  const ok = await showConfirm(
+    `"${schedaLabel(sch)}" e tutti i suoi risultati verranno cancellati. Non si può annullare.`,
+    { title: 'Eliminare la scheda?', confirmLabel: 'Elimina', danger: true });
+  if (!ok) return;
+  const uid = (window.PALESTRA_USER || {}).id;
+  try {
+    // .select() sulla delete: se nessuna riga viene toccata NON è un successo silenzioso
+    const { data: del, error } = await withTimeout(window.sb.from('schede')
+      .delete().eq('user_id', uid).eq('sched_id', id).select('id'));
+    if (error) throw error;
+    if (!del || !del.length) throw new Error('nessuna riga eliminata');
+    state.data.schede = state.data.schede.filter((s) => s.id !== id);
+    if (state.schedaId === id) state.schedaId = null;
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.data)); } catch (_) {}
+    toast('Scheda eliminata');
+    go('#/storico');
+  } catch (err) {
+    toast('Eliminazione non riuscita (sei offline?)');
   }
 }
 
@@ -783,10 +816,15 @@ function renderDetail() {
   } else {
     html += `<div class="section-head"><h3>${esc(giorno.nome)}</h3><span class="count">${giorno.esercizi.length} esercizi</span></div>`;
     html += giorno.esercizi.map((e, i) => exerciseCard(e, i)).join('');
+    // "Elimina" solo per le schede archiviate: quella in corso prima si archivia
+    const isCur = sch.id === state.data.correnteId;
     html += `<div class="sch-footer"><button class="sch-edit" id="editSchedaBtn">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         Modifica scheda
-      </button></div>`;
+      </button>${isCur ? '' : `<button class="sch-edit sch-archive" id="deleteSchedaBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>
+        Elimina scheda
+      </button>`}</div>`;
   }
 
   viewEl.innerHTML = html;
@@ -799,6 +837,8 @@ function renderDetail() {
     b.addEventListener('click', () => { state.dayIndex = +b.dataset.day; renderDetail(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
   const esb = document.getElementById('editSchedaBtn');
   if (esb) esb.addEventListener('click', () => go('#/modifica/' + sch.id));
+  const dsb = document.getElementById('deleteSchedaBtn');
+  if (dsb) dsb.addEventListener('click', () => deleteScheda(sch.id));
 }
 
 /* ---------------- grafici progressi (scheda storica) ---------------- */
@@ -2017,7 +2057,7 @@ function buildAdmin() {
 /* ---------------- supporto / segnalazioni ---------------- */
 let OPEN_REPORTS = 0;       // problemi non risolti (badge owner)
 let SUPPORT_CACHE = [];     // ultima lista caricata (per il dettaglio)
-const APP_VER = 'v43';      // versione asset, allegata al contesto tecnico
+const APP_VER = 'v44';      // versione asset, allegata al contesto tecnico
 const MAX_OPEN_SEGN = 6;    // anti-spam: max segnalazioni aperte per utente
 
 const BACK_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
